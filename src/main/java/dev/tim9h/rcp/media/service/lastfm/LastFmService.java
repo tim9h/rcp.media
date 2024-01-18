@@ -31,7 +31,7 @@ public class LastFmService {
 		return apiKey;
 	}
 
-	private String getUsername() {
+	public String getUsername() {
 		if (StringUtils.isBlank(username)) {
 			username = settings.getString(MediaViewFactory.SETTING_LASTFM_USERNAME);
 		}
@@ -46,6 +46,7 @@ public class LastFmService {
 		var iterator = User.getRecentTracks(getUsername(), getApiKey()).iterator();
 		if (iterator.hasNext()) {
 			var track = iterator.next();
+			System.out.println("now playing: " + track.isNowPlaying());
 			return new Track(track.getName(), track.getArtist(), track.getAlbum(), track.isNowPlaying());
 		}
 		return null;

@@ -44,6 +44,8 @@ import javafx.util.Duration;
 
 public class MediaView implements CCard {
 
+	public static final String NOT_PLAYING = "Not playing";
+
 	private static final String MODE_LASTFM = "lastfm";
 
 	public static final String SETTING_MODES = "core.modes";
@@ -70,9 +72,9 @@ public class MediaView implements CCard {
 	@Inject
 	private LastFmWatcher lastFmWatcher;
 
-	private Hyperlink lblArtist;
-
 	private Hyperlink lblTitle;
+
+	private Hyperlink lblArtist;
 
 	private Hyperlink lblAlbum;
 
@@ -81,8 +83,6 @@ public class MediaView implements CCard {
 
 	@Inject
 	private EventManager eventManager;
-
-	private VBox songInfo;
 
 	@Inject
 	private IconButton btnPrev;
@@ -103,8 +103,8 @@ public class MediaView implements CCard {
 
 	@Override
 	public Optional<Node> getNode() throws IOException {
-		lblArtist = new Hyperlink();
 		lblTitle = new Hyperlink();
+		lblArtist = new Hyperlink();
 		lblAlbum = new Hyperlink();
 		lblTitle.getStyleClass().add("accent-label");
 
@@ -132,25 +132,27 @@ public class MediaView implements CCard {
 			eventManager.echo("Next");
 		});
 
-		bindNowPlayingProperties();
+		createCurrentTrackBindings();
 
 		// add last.fm links
 		lblTitle.setOnAction(e -> {
 			eventManager.post(new CcEvent(CcEvent.EVENT_CLI_REQUEST_FOCUS));
-			openUrl("https://www.last.fm/music/%s/_/%s", encodeValue(lblArtist.getText()),
-					encodeValue(lblTitle.getText()));
+			if (currentTrack.getNowPlayingProperty().get()) {
+				openUrl("https://www.last.fm/music/%s/_/%s", lblArtist.getText(), lblTitle.getText());
+			} else {
+				openUrl("https://www.last.fm/user/%s", lastFmService.getUsername());
+			}
 		});
 		lblArtist.setOnAction(e -> {
 			eventManager.post(new CcEvent(CcEvent.EVENT_CLI_REQUEST_FOCUS));
-			openUrl("https://www.last.fm/music/%s/", encodeValue(lblArtist.getText()));
+			openUrl("https://www.last.fm/music/%s/", lblArtist.getText());
 		});
 		lblAlbum.setOnAction(e -> {
 			eventManager.post(new CcEvent(CcEvent.EVENT_CLI_REQUEST_FOCUS));
-			openUrl("https://www.last.fm/music/%s/%s/", encodeValue(lblArtist.getText()),
-					encodeValue(lblAlbum.getText()));
+			openUrl("https://www.last.fm/music/%s/%s/", lblArtist.getText(), lblAlbum.getText());
 		});
 
-		songInfo = new VBox(lblTitle, lblArtist, lblAlbum);
+		var songInfo = new VBox(lblTitle, lblArtist, lblAlbum);
 
 		var fade = new FadeTransition(getAnimationDuration(), songInfo);
 		fade.setFromValue(0.0);
@@ -171,38 +173,25 @@ public class MediaView implements CCard {
 		hbox.getChildren().addAll(songInfo, buttons);
 		hbox.setFillHeight(false);
 		hbox.setMaxHeight(Region.USE_PREF_SIZE);
+		hbox.setAlignment(Pos.CENTER);
 
 		return Optional.of(hbox);
 	}
 
-	private void bindNowPlayingProperties() {
-		lblTitle.textProperty().bind(currentTrack.getTitleProperty());
+	private void createCurrentTrackBindings() {
+		lblTitle.textProperty().bind(Bindings.createStringBinding(
+				() -> currentTrack.getNowPlayingProperty().get() ? currentTrack.getTitleProperty().get() : NOT_PLAYING,
+				currentTrack.getTitleProperty(), currentTrack.getNowPlayingProperty()));
 		lblAlbum.textProperty().bind(currentTrack.getAlbumProperty());
 		lblArtist.textProperty().bind(currentTrack.getArtistProperty());
-
-		lblTitle.visibleProperty().bind(Bindings.createBooleanBinding(
-				() -> Boolean.valueOf(StringUtils.isNotBlank(lblTitle.textProperty().get())), lblTitle.textProperty()));
-		lblAlbum.visibleProperty().bind(Bindings.createBooleanBinding(
-				() -> Boolean.valueOf(StringUtils.isNotBlank(lblAlbum.textProperty().get())), lblAlbum.textProperty()));
-		lblArtist.visibleProperty()
-				.bind(Bindings.createBooleanBinding(
-						() -> Boolean.valueOf(StringUtils.isNotBlank(lblArtist.textProperty().get())),
-						lblArtist.textProperty()));
-
-		currentTrack.getTitleProperty().addListener((obs, oldVal, newVal) -> {
-			if (newVal.isBlank()) {
-				songInfo.setMinHeight(0);
-				songInfo.setMaxHeight(0);
-			} else {
-				songInfo.setMinHeight(Region.USE_COMPUTED_SIZE);
-				songInfo.setMaxHeight(Region.USE_COMPUTED_SIZE);
-			}
-		});
+		lblAlbum.disableProperty().bind(currentTrack.getNowPlayingProperty().not());
+		lblArtist.disableProperty().bind(currentTrack.getNowPlayingProperty().not());
 	}
 
-	private void openUrl(String url, Object... params) {
+	private void openUrl(String url, String... params) {
+		var encodedParams = Arrays.stream(params).map(s -> encodeValue(s)).toArray();
 		try {
-			Desktop.getDesktop().browse(new URI(String.format(url, params)));
+			Desktop.getDesktop().browse(new URI(String.format(url, encodedParams)));
 		} catch (URISyntaxException | IOException e) {
 			logger.error(() -> "Unable to open url", e);
 		}

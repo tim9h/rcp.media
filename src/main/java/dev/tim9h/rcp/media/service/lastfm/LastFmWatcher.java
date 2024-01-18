@@ -49,27 +49,21 @@ public class LastFmWatcher {
 	private void updateProperties() {
 		var track = service.getCurrentTrack();
 		if (track != null && track.isPlaying()) {
-			if (!StringUtils.equals(currentTrack.getTitleProperty().get(), track.title())
-					|| !StringUtils.equals(currentTrack.getArtistProperty().get(), track.artist())
-					|| !StringUtils.equals(currentTrack.getAlbumProperty().get(), track.album())) {
-				logger.debug(() -> "Updating song properties: " + track);
-				Platform.runLater(() -> {
-					currentTrack.getTitleProperty().set(track.title());
-					currentTrack.getArtistProperty().set(track.artist());
-					currentTrack.getAlbumProperty().set(track.album());
-				});
-			}
-		} else {
-			if (StringUtils.isNotBlank(currentTrack.getTitleProperty().get())
-					&& StringUtils.isNotBlank(currentTrack.getArtistProperty().get())
-					&& StringUtils.isNotBlank(currentTrack.getAlbumProperty().get())) {
-				logger.debug(() -> "Clearing song properties: not playing");
-				Platform.runLater(() -> {
-					currentTrack.getTitleProperty().set(StringUtils.EMPTY);
-					currentTrack.getArtistProperty().set(StringUtils.EMPTY);
-					currentTrack.getAlbumProperty().set(StringUtils.EMPTY);
-				});
-			}
+			logger.debug(() -> "Updating song properties: " + track);
+			Platform.runLater(() -> {
+				currentTrack.getTitleProperty().set(track.title());
+				currentTrack.getArtistProperty().set(track.artist());
+				currentTrack.getAlbumProperty().set(track.album());
+				currentTrack.getNowPlayingProperty().set(true);
+			});
+		} else if (track != null && !track.isPlaying()) {
+			logger.debug(() -> "Clearing song properties: not playing");
+			Platform.runLater(() -> {
+				currentTrack.getTitleProperty().set(MediaView.NOT_PLAYING);
+				currentTrack.getArtistProperty().set(StringUtils.EMPTY);
+				currentTrack.getAlbumProperty().set(StringUtils.EMPTY);
+				currentTrack.getNowPlayingProperty().set(false);
+			});
 		}
 	}
 
