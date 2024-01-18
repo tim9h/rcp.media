@@ -46,7 +46,6 @@ public class LastFmService {
 		var iterator = User.getRecentTracks(getUsername(), getApiKey()).iterator();
 		if (iterator.hasNext()) {
 			var track = iterator.next();
-			System.out.println("now playing: " + track.isNowPlaying());
 			return new Track(track.getName(), track.getArtist(), track.getAlbum(), track.isNowPlaying());
 		}
 		return null;
