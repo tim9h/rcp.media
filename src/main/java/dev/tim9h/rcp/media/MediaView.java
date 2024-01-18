@@ -182,8 +182,17 @@ public class MediaView implements CCard {
 		lblTitle.textProperty().bind(Bindings.createStringBinding(
 				() -> currentTrack.getNowPlayingProperty().get() ? currentTrack.getTitleProperty().get() : NOT_PLAYING,
 				currentTrack.getTitleProperty(), currentTrack.getNowPlayingProperty()));
-		lblAlbum.textProperty().bind(currentTrack.getAlbumProperty());
-		lblArtist.textProperty().bind(currentTrack.getArtistProperty());
+		lblAlbum.textProperty()
+				.bind(Bindings.createStringBinding(
+						() -> currentTrack.getNowPlayingProperty().get() ? currentTrack.getAlbumProperty().get()
+								: StringUtils.EMPTY,
+						currentTrack.getAlbumProperty(), currentTrack.getNowPlayingProperty()));
+		lblArtist.textProperty()
+				.bind(Bindings.createStringBinding(
+						() -> currentTrack.getNowPlayingProperty().get() ? currentTrack.getArtistProperty().get()
+								: StringUtils.EMPTY,
+						currentTrack.getArtistProperty(), currentTrack.getNowPlayingProperty()));
+
 		lblAlbum.disableProperty().bind(currentTrack.getNowPlayingProperty().not());
 		lblArtist.disableProperty().bind(currentTrack.getNowPlayingProperty().not());
 	}
