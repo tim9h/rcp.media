@@ -85,7 +85,6 @@ public class LastFmWatcher {
 	public void stopPolling() {
 		if (timer != null) {
 			timer.cancel();
-			timer.purge();
 		}
 	}
 
