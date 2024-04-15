@@ -49,7 +49,6 @@ public class LastFmWatcher {
 	private void updateProperties() {
 		var track = service.getCurrentTrack();
 		if (track != null && track.isPlaying()) {
-			logger.debug(() -> "Updating song properties: " + track);
 			Platform.runLater(() -> {
 				currentTrack.getTitleProperty().set(track.title());
 				currentTrack.getArtistProperty().set(track.artist());
@@ -57,7 +56,6 @@ public class LastFmWatcher {
 				currentTrack.getNowPlayingProperty().set(true);
 			});
 		} else if (track != null && !track.isPlaying()) {
-			logger.debug(() -> "Clearing song properties: not playing");
 			Platform.runLater(() -> {
 				currentTrack.getTitleProperty().set(MediaView.NOT_PLAYING);
 				currentTrack.getArtistProperty().set(StringUtils.EMPTY);
