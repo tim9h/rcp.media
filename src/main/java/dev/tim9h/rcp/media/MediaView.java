@@ -109,25 +109,25 @@ public class MediaView implements CCard {
 		lblTitle.getStyleClass().add("accent-label");
 
 		btnPrev.setLabel('⏪');
-		btnPrev.setOnAction(event -> {
+		btnPrev.setOnAction(_ -> {
 			mediaService.prevSong();
 			eventManager.echo("Previous");
 		});
 
 		btnStop.setLabel('⏹');
-		btnStop.setOnAction(event -> {
+		btnStop.setOnAction(_ -> {
 			mediaService.stop();
 			eventManager.echo("Stop");
 		});
 
 		btnPlay.setLabel('⏵');
-		btnPlay.setOnAction(event -> {
+		btnPlay.setOnAction(_ -> {
 			mediaService.playPause();
 			eventManager.echo("Play/Pause");
 		});
 
 		btnNext.setLabel('⏩');
-		btnNext.setOnAction(event -> {
+		btnNext.setOnAction(_ -> {
 			mediaService.nextSong();
 			eventManager.echo("Next");
 		});
@@ -135,7 +135,7 @@ public class MediaView implements CCard {
 		createCurrentTrackBindings();
 
 		// add last.fm links
-		lblTitle.setOnAction(e -> {
+		lblTitle.setOnAction(_ -> {
 			eventManager.post(new CcEvent(CcEvent.EVENT_CLI_REQUEST_FOCUS));
 			if (currentTrack.getNowPlayingProperty().get()) {
 				openUrl("https://www.last.fm/music/%s/_/%s", lblArtist.getText(), lblTitle.getText());
@@ -143,11 +143,11 @@ public class MediaView implements CCard {
 				openUrl("https://www.last.fm/user/%s", lastFmService.getUsername());
 			}
 		});
-		lblArtist.setOnAction(e -> {
+		lblArtist.setOnAction(_ -> {
 			eventManager.post(new CcEvent(CcEvent.EVENT_CLI_REQUEST_FOCUS));
 			openUrl("https://www.last.fm/music/%s/", lblArtist.getText());
 		});
-		lblAlbum.setOnAction(e -> {
+		lblAlbum.setOnAction(_ -> {
 			eventManager.post(new CcEvent(CcEvent.EVENT_CLI_REQUEST_FOCUS));
 			openUrl("https://www.last.fm/music/%s/%s/", lblArtist.getText(), lblAlbum.getText());
 		});
@@ -160,7 +160,7 @@ public class MediaView implements CCard {
 		fade.setAutoReverse(true);
 
 		if (settings.getBoolean(SETTINGS_ANIMATIONS_ENABLED).booleanValue()) {
-			lblTitle.textProperty().addListener((obs, oldVal, newVal) -> fade.play());
+			lblTitle.textProperty().addListener((_, _, _) -> fade.play());
 		}
 
 		var buttons = new HBox(btnPrev, btnStop, btnPlay, btnNext);
@@ -242,23 +242,23 @@ public class MediaView implements CCard {
 	public void initBus(EventManager em) {
 		CCard.super.initBus(eventManager);
 
-		em.listen("next", data -> {
+		em.listen("next", _ -> {
 			mediaService.nextSong();
 			em.echo("Playing next song");
 		});
-		em.listen("previous", data -> {
+		em.listen("previous", _ -> {
 			mediaService.prevSong();
 			em.echo("Playing previous song");
 		});
-		em.listen("play", data -> {
+		em.listen("play", _ -> {
 			mediaService.playPause();
 			em.echo("Play/Pause music");
 		});
-		em.listen("pause", data -> {
+		em.listen("pause", _ -> {
 			mediaService.playPause();
 			em.echo("Play/Pause music");
 		});
-		em.listen("stop", data -> {
+		em.listen("stop", _ -> {
 			mediaService.stop();
 			em.echo("Stop playing music");
 		});
