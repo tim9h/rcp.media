@@ -40,7 +40,7 @@ public class LastFmService {
 
 	public Track getCurrentTrack() {
 		if (StringUtils.isBlank(getUsername()) || StringUtils.isBlank(getApiKey())) {
-			eventManager.echo("Last.fm Service not configured");
+			eventManager.echoAsync("Last.fm Service not configured");
 			return null;
 		}
 		var iterator = User.getRecentTracks(getUsername(), getApiKey()).iterator();

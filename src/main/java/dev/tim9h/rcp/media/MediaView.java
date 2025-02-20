@@ -44,6 +44,8 @@ import javafx.util.Duration;
 
 public class MediaView implements CCard {
 
+	private static final String PROFILE = "profile";
+
 	public static final String NOT_PLAYING = "Not playing";
 
 	private static final String MODE_LASTFM = "lastfm";
@@ -95,6 +97,9 @@ public class MediaView implements CCard {
 
 	@Inject
 	private IconButton btnNext;
+
+	@Inject
+	private IconButton btnLastFm;
 
 	@Override
 	public String getName() {
@@ -163,7 +168,10 @@ public class MediaView implements CCard {
 			lblTitle.textProperty().addListener((_, _, _) -> fade.play());
 		}
 
-		var buttons = new HBox(btnPrev, btnStop, btnPlay, btnNext);
+		btnLastFm.setLabel('∞');
+		btnLastFm.setOnAction(_ -> eventManager.post(MODE_LASTFM, PROFILE));
+
+		var buttons = new HBox(btnLastFm, btnPrev, btnStop, btnPlay, btnNext);
 		buttons.setAlignment(Pos.CENTER_RIGHT);
 		buttons.setPrefHeight(Region.USE_PREF_SIZE);
 
@@ -289,25 +297,7 @@ public class MediaView implements CCard {
 
 			@Override
 			public void onCommand(String command, String... args) {
-				var join = StringUtils.join(args);
-				if ("np".equals(command)) {
-					eventManager.showWaitingIndicator();
-					CompletableFuture.supplyAsync(() -> lastFmService.getCurrentTrack()).thenAccept(track -> {
-						if (track != null) {
-							if (track.isPlaying()) {
-								eventManager.echoAsync(track.artist(), track.title());
-							} else {
-								eventManager.echoAsync("Not scrobbling");
-							}
-						}
-					});
-				} else if ("username".equals(command)) {
-					settings.persist(MediaViewFactory.SETTING_LASTFM_USERNAME, join);
-					eventManager.echo("Updated last.fm Username");
-				} else if ("apikey".equals(command)) {
-					settings.persist(MediaViewFactory.SETTING_LASTFM_APIKEY, join);
-					eventManager.echo("Updated last.fm API key");
-				}
+				handleLastfmCommands(command, args);
 			}
 
 			@Override
@@ -325,10 +315,46 @@ public class MediaView implements CCard {
 			@Override
 			public TreeNode<String> getCommandTree() {
 				var commands = Mode.super.getCommandTree();
-				commands.add("np", "username", "apikey");
+				commands.add("np", "username", "apikey", PROFILE);
 				return commands;
 			}
 		}));
+	}
+
+	private void handleLastfmCommands(String command, String... args) {
+		var join = StringUtils.join(args);
+		if ("np".equals(command)) {
+			lastFmNowPlaying();
+		} else if ("username".equals(command)) {
+			if (StringUtils.isBlank(join)) {
+				eventManager.echo("Last.fm username", settings.getString(MediaViewFactory.SETTING_LASTFM_USERNAME));
+			} else {
+				settings.persist(MediaViewFactory.SETTING_LASTFM_USERNAME, join);
+				eventManager.echo("Updated last.fm Username");
+			}
+		} else if ("apikey".equals(command)) {
+			if (StringUtils.isBlank(join)) {
+				eventManager.echo("Last.fm API key", settings.getString(MediaViewFactory.SETTING_LASTFM_APIKEY));
+			} else {
+				settings.persist(MediaViewFactory.SETTING_LASTFM_APIKEY, join);
+				eventManager.echo("Updated last.fm API key");
+			}
+		} else if (PROFILE.equals(command)) {
+			openUrl("https://www.last.fm/user/%s", lastFmService.getUsername());
+		}
+	}
+
+	private void lastFmNowPlaying() {
+		eventManager.showWaitingIndicator();
+		CompletableFuture.supplyAsync(() -> lastFmService.getCurrentTrack()).thenAccept(track -> {
+			if (track != null) {
+				if (track.isPlaying()) {
+					eventManager.echoAsync(track.artist(), track.title());
+				} else {
+					eventManager.echoAsync("Not scrobbling");
+				}
+			}
+		});
 	}
 
 	@Override
