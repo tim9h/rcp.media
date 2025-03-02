@@ -281,7 +281,7 @@ public class MediaView implements CCard {
 	private Duration getAnimationDuration() {
 		if (animationDuration == null) {
 			animationDuration = Duration
-					.millis(settings.getDouble("ui.components.label.animationduration").doubleValue());
+					.millis(settings.getDouble("ui.components.label.fade.duration").doubleValue());
 		}
 		return animationDuration;
 	}
