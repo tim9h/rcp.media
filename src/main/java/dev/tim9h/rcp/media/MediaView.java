@@ -280,8 +280,7 @@ public class MediaView implements CCard {
 
 	private Duration getAnimationDuration() {
 		if (animationDuration == null) {
-			animationDuration = Duration
-					.millis(settings.getDouble("ui.components.label.fade.duration").doubleValue());
+			animationDuration = Duration.millis(settings.getDouble("ui.components.label.fade.duration").doubleValue());
 		}
 		return animationDuration;
 	}
@@ -349,9 +348,9 @@ public class MediaView implements CCard {
 		CompletableFuture.supplyAsync(() -> lastFmService.getCurrentTrack()).thenAccept(track -> {
 			if (track != null) {
 				if (track.isPlaying()) {
-					eventManager.echoAsync(track.artist(), track.title());
+					eventManager.echo(track.artist(), track.title());
 				} else {
-					eventManager.echoAsync("Not scrobbling");
+					eventManager.echo("Not scrobbling");
 				}
 			}
 		});
