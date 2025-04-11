@@ -349,8 +349,10 @@ public class MediaView implements CCard {
 			if (track != null) {
 				if (track.isPlaying()) {
 					eventManager.echo(track.artist(), track.title());
+					eventManager.post(new CcEvent("np", track.title(), track.artist(), track.album(), track.isPlaying()));	
 				} else {
-					eventManager.echo("Not scrobbling");
+					eventManager.echo("Not scrobbling");	
+					eventManager.post(new CcEvent("np", StringUtils.EMPTY, StringUtils.EMPTY, StringUtils.EMPTY, false));
 				}
 			}
 		});

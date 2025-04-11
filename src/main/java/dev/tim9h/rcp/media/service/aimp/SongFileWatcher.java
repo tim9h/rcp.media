@@ -19,6 +19,7 @@ import com.google.inject.Injector;
 import com.google.inject.Singleton;
 
 import dev.tim9h.rcp.controls.utils.DelayedRunner;
+import dev.tim9h.rcp.event.CcEvent;
 import dev.tim9h.rcp.event.EventManager;
 import dev.tim9h.rcp.logging.InjectLogger;
 import dev.tim9h.rcp.media.MediaViewFactory;
@@ -110,11 +111,14 @@ public class SongFileWatcher extends DelayedRunner implements Runnable {
 					currentTrack.getTitleProperty().set(lines.get(0));
 					currentTrack.getArtistProperty().set(lines.get(1));
 					currentTrack.getAlbumProperty().set(lines.get(2));
+					eventManager.post(new CcEvent("np", lines.get(0), lines.get(1), lines.get(2), true));
 				} else if (lines.size() < 3) {
 					logger.debug(() -> "Clearing song properties: " + StringUtils.join(lines, " - "));
 					currentTrack.getTitleProperty().set(StringUtils.EMPTY);
 					currentTrack.getArtistProperty().set(StringUtils.EMPTY);
 					currentTrack.getAlbumProperty().set(StringUtils.EMPTY);
+					eventManager
+							.post(new CcEvent("np", StringUtils.EMPTY, StringUtils.EMPTY, StringUtils.EMPTY, false));
 				}
 			});
 		} catch (IOException e) {
