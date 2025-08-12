@@ -56,7 +56,7 @@ public class SongFileWatcher extends DelayedRunner implements Runnable {
 		injector.injectMembers(this);
 		currentTrackInfoPath = settings.getString(MediaViewFactory.SETTING_CURRENTTRACKINFOPATH);
 		if (StringUtils.isBlank(currentTrackInfoPath)) {
-			eventManager.echo("Missing preference: currentTrackInfoPath");
+			eventManager.echo("Missing preference: " + MediaViewFactory.SETTING_CURRENTTRACKINFOPATH);
 			logger.warn(() -> "Unable to watch current track: Preference currentTrackInfoPath not set");
 		} else {
 			parseFileInfoFile(Path.of(currentTrackInfoPath));
