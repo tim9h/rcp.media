@@ -270,6 +270,11 @@ public class MediaView implements CCard {
 			mediaService.stop();
 			em.echo("Stop playing music");
 		});
+		em.listen("np", data -> {
+			if (StringUtils.join(data) == null) {
+				lastFmWatcher.updatePropertiesAsync();
+			}
+		});
 	}
 
 	@Override
