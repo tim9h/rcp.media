@@ -7,7 +7,7 @@ module rcp.clock {
 	requires javafx.controls;
 	requires javafx.graphics;
 	requires java.desktop;
-	requires com.github.kwhat.jnativehook;
+	requires transitive com.github.kwhat.jnativehook;
 	requires org.apache.commons.lang3;
 	requires transitive rcp.controls;
 	requires lastfm.java;
