@@ -40,5 +40,20 @@ public class MediaService {
 		GlobalScreen.postNativeEvent(new NativeKeyEvent(2401, 0, 178, 57380, NativeKeyEvent.CHAR_UNDEFINED));
 		watcher.updatePropertiesAsync();
 	}
+	
+	public void volumeUp() {
+		logger.debug(() -> "Firing volume up key event");
+		GlobalScreen.postNativeEvent(new NativeKeyEvent(2401, 0, 175, 57392, NativeKeyEvent.CHAR_UNDEFINED));
+	}
+	
+	public void volumeDown() {
+		logger.debug(() -> "Firing volume down key event");
+		GlobalScreen.postNativeEvent(new NativeKeyEvent(2401, 0, 174, 57390, NativeKeyEvent.CHAR_UNDEFINED));
+	}
+	
+	public void mute() {
+		logger.debug(() -> "Firing mute key event");
+		GlobalScreen.postNativeEvent(new NativeKeyEvent(2401, 0, 173, 57376, NativeKeyEvent.CHAR_UNDEFINED));
+	}
 
 }

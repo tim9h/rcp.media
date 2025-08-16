@@ -275,6 +275,18 @@ public class MediaView implements CCard {
 				lastFmWatcher.updatePropertiesAsync();
 			}
 		});
+		em.listen("volumeup", _ -> {
+			mediaService.volumeUp();
+			em.echo("Volume up");
+		});
+		em.listen("volumedown", _ -> {
+			mediaService.volumeDown();
+			em.echo("Volume down");
+		});
+		em.listen("mute", _ -> {
+			mediaService.mute();
+			em.echo("Mute");
+		});
 	}
 
 	@Override
