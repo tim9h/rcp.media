@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.Strings;
 import org.apache.logging.log4j.Logger;
 
 import com.google.inject.Inject;
@@ -104,9 +105,9 @@ public class SongFileWatcher extends DelayedRunner implements Runnable {
 				lines.set(0, lines.get(0).replace(BOM, StringUtils.EMPTY));
 			}
 			Platform.runLater(() -> {
-				if (lines.size() > 2 && (!StringUtils.equals(currentTrack.getTitleProperty().get(), lines.get(0))
-						|| !StringUtils.equals(currentTrack.getArtistProperty().get(), lines.get(1))
-						|| !StringUtils.equals(currentTrack.getAlbumProperty().get(), lines.get(2)))) {
+				if (lines.size() > 2 && (!Strings.CS.equals(currentTrack.getTitleProperty().get(), lines.get(0))
+						|| !Strings.CS.equals(currentTrack.getArtistProperty().get(), lines.get(1))
+						|| !Strings.CS.equals(currentTrack.getAlbumProperty().get(), lines.get(2)))) {
 					logger.debug(() -> "Updating song properties: " + StringUtils.join(lines, " - "));
 					currentTrack.getTitleProperty().set(lines.get(0));
 					currentTrack.getArtistProperty().set(lines.get(1));
