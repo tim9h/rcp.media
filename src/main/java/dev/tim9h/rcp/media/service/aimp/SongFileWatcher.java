@@ -141,6 +141,7 @@ public class SongFileWatcher extends DelayedRunner implements Runnable {
 		if (thread != null) {
 			thread.interrupt();
 		}
+		logger.debug(() -> "SongWatcher terminated");
 	}
 
 }
