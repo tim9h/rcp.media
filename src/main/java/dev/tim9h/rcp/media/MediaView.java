@@ -30,6 +30,7 @@ import dev.tim9h.rcp.spi.CCard;
 import dev.tim9h.rcp.spi.Gravity;
 import dev.tim9h.rcp.spi.Mode;
 import dev.tim9h.rcp.spi.Position;
+import dev.tim9h.rcp.spi.StringNode;
 import dev.tim9h.rcp.spi.TreeNode;
 import javafx.animation.FadeTransition;
 import javafx.beans.binding.Bindings;
@@ -377,7 +378,7 @@ public class MediaView implements CCard {
 
 	@Override
 	public Optional<TreeNode<String>> getModelessCommands() {
-		return Optional.of(new TreeNode<>(StringUtils.EMPTY).add("next", "previous", "play", "pause", "stop"));
+		return Optional.of(new StringNode().add("next", "previous", "play", "pause", "stop"));
 	}
 
 }
