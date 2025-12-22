@@ -26,9 +26,9 @@ import dev.tim9h.rcp.media.service.lastfm.LastFmService;
 import dev.tim9h.rcp.media.service.lastfm.LastFmWatcher;
 import dev.tim9h.rcp.media.service.playback.MediaService;
 import dev.tim9h.rcp.settings.Settings;
-import dev.tim9h.rcp.spi.CCard;
 import dev.tim9h.rcp.spi.Gravity;
 import dev.tim9h.rcp.spi.Mode;
+import dev.tim9h.rcp.spi.Plugin;
 import dev.tim9h.rcp.spi.Position;
 import dev.tim9h.rcp.spi.StringNode;
 import dev.tim9h.rcp.spi.TreeNode;
@@ -43,7 +43,7 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.util.Duration;
 
-public class MediaView implements CCard {
+public class MediaView implements Plugin {
 
 	private static final String PROFILE = "profile";
 
@@ -249,7 +249,7 @@ public class MediaView implements CCard {
 
 	@Override
 	public void initBus(EventManager em) {
-		CCard.super.initBus(eventManager);
+		Plugin.super.initBus(eventManager);
 
 		em.listen("next", _ -> {
 			mediaService.nextSong();
