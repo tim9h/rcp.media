@@ -23,7 +23,7 @@ import dev.tim9h.rcp.controls.utils.DelayedRunner;
 import dev.tim9h.rcp.event.CcEvent;
 import dev.tim9h.rcp.event.EventManager;
 import dev.tim9h.rcp.logging.InjectLogger;
-import dev.tim9h.rcp.media.MediaViewFactory;
+import dev.tim9h.rcp.media.MediaView;
 import dev.tim9h.rcp.media.service.bean.CurrentTrackProperties;
 import dev.tim9h.rcp.settings.Settings;
 import javafx.application.Platform;
@@ -55,9 +55,9 @@ public class SongFileWatcher extends DelayedRunner implements Runnable {
 	public SongFileWatcher(Injector injector) {
 		super(5); // set delay to 50 ms
 		injector.injectMembers(this);
-		currentTrackInfoPath = settings.getString(MediaViewFactory.SETTING_CURRENTTRACKINFOPATH);
+		currentTrackInfoPath = settings.getString(MediaView.SETTING_CURRENTTRACKINFOPATH);
 		if (StringUtils.isBlank(currentTrackInfoPath)) {
-			eventManager.echo("Missing preference: " + MediaViewFactory.SETTING_CURRENTTRACKINFOPATH);
+			eventManager.echo("Missing preference: " + MediaView.SETTING_CURRENTTRACKINFOPATH);
 			logger.warn(() -> "Unable to watch current track: Preference currentTrackInfoPath not set");
 		} else {
 			parseFileInfoFile(Path.of(currentTrackInfoPath));

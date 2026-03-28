@@ -8,7 +8,7 @@ import com.google.inject.Singleton;
 import de.umass.lastfm.User;
 import dev.tim9h.rcp.event.CcEvent;
 import dev.tim9h.rcp.event.EventManager;
-import dev.tim9h.rcp.media.MediaViewFactory;
+import dev.tim9h.rcp.media.MediaView;
 import dev.tim9h.rcp.media.service.bean.Track;
 import dev.tim9h.rcp.settings.Settings;
 
@@ -27,14 +27,14 @@ public class LastFmService {
 
 	private String getApiKey() {
 		if (StringUtils.isBlank(apiKey)) {
-			apiKey = settings.getString(MediaViewFactory.SETTING_LASTFM_APIKEY);
+			apiKey = settings.getString(MediaView.SETTING_LASTFM_APIKEY);
 		}
 		return apiKey;
 	}
 
 	public String getUsername() {
 		if (StringUtils.isBlank(username)) {
-			username = settings.getString(MediaViewFactory.SETTING_LASTFM_USERNAME);
+			username = settings.getString(MediaView.SETTING_LASTFM_USERNAME);
 		}
 		return username;
 	}

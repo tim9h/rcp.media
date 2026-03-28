@@ -12,7 +12,6 @@ import com.google.inject.Singleton;
 
 import dev.tim9h.rcp.logging.InjectLogger;
 import dev.tim9h.rcp.media.MediaView;
-import dev.tim9h.rcp.media.MediaViewFactory;
 import dev.tim9h.rcp.media.service.bean.CurrentTrackProperties;
 import dev.tim9h.rcp.settings.Settings;
 import javafx.application.Platform;
@@ -43,7 +42,7 @@ public class LastFmWatcher {
 				updateProperties();
 			}
 
-		}, 0, settings.getLong(MediaViewFactory.SETTING_LASTFM_POLLINGINTERVAL).longValue());
+		}, 0, settings.getLong(MediaView.SETTING_LASTFM_POLLINGINTERVAL).longValue());
 	}
 
 	private void updateProperties() {

@@ -7,7 +7,9 @@ import java.net.URISyntaxException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
@@ -44,6 +46,14 @@ import javafx.scene.layout.VBox;
 import javafx.util.Duration;
 
 public class MediaView implements Plugin {
+
+	public static final String SETTING_CURRENTTRACKINFOPATH = "media.currenttrackinfopath";
+
+	public static final String SETTING_LASTFM_APIKEY = "media.lastfm.apikey";
+
+	public static final String SETTING_LASTFM_USERNAME = "media.lastfm.username";
+
+	public static final String SETTING_LASTFM_POLLINGINTERVAL = "media.lastfm.pollinginterval";
 
 	private static final String PROFILE = "profile";
 
@@ -105,6 +115,11 @@ public class MediaView implements Plugin {
 	@Override
 	public String getName() {
 		return "Music Player";
+	}
+
+	@Override
+	public String getId() {
+		return "media";
 	}
 
 	@Override
@@ -344,16 +359,16 @@ public class MediaView implements Plugin {
 			lastFmNowPlaying();
 		} else if ("username".equals(command)) {
 			if (StringUtils.isBlank(join)) {
-				eventManager.echo("Last.fm username", settings.getString(MediaViewFactory.SETTING_LASTFM_USERNAME));
+				eventManager.echo("Last.fm username", settings.getString(SETTING_LASTFM_USERNAME));
 			} else {
-				settings.persist(MediaViewFactory.SETTING_LASTFM_USERNAME, join);
+				settings.persist(SETTING_LASTFM_USERNAME, join);
 				eventManager.echo("Updated last.fm Username");
 			}
 		} else if ("apikey".equals(command)) {
 			if (StringUtils.isBlank(join)) {
-				eventManager.echo("Last.fm API key", settings.getString(MediaViewFactory.SETTING_LASTFM_APIKEY));
+				eventManager.echo("Last.fm API key", settings.getString(SETTING_LASTFM_APIKEY));
 			} else {
-				settings.persist(MediaViewFactory.SETTING_LASTFM_APIKEY, join);
+				settings.persist(SETTING_LASTFM_APIKEY, join);
 				eventManager.echo("Updated last.fm API key");
 			}
 		} else if (PROFILE.equals(command)) {
@@ -367,10 +382,12 @@ public class MediaView implements Plugin {
 			if (track != null) {
 				if (track.isPlaying()) {
 					eventManager.echo(track.artist(), track.title());
-					eventManager.post(new CcEvent("np", track.title(), track.artist(), track.album(), track.isPlaying()));	
+					eventManager
+							.post(new CcEvent("np", track.title(), track.artist(), track.album(), track.isPlaying()));
 				} else {
-					eventManager.echo("Not scrobbling");	
-					eventManager.post(new CcEvent("np", StringUtils.EMPTY, StringUtils.EMPTY, StringUtils.EMPTY, false));
+					eventManager.echo("Not scrobbling");
+					eventManager
+							.post(new CcEvent("np", StringUtils.EMPTY, StringUtils.EMPTY, StringUtils.EMPTY, false));
 				}
 			}
 		});
@@ -379,6 +396,16 @@ public class MediaView implements Plugin {
 	@Override
 	public Optional<TreeNode<String>> getModelessCommands() {
 		return Optional.of(new StringNode().add("next", "previous", "play", "pause", "stop"));
+	}
+
+	@Override
+	public Map<String, String> getSettingsContributions() {
+		HashMap<String, String> map = new HashMap<>();
+		map.put(SETTING_CURRENTTRACKINFOPATH, StringUtils.EMPTY);
+		map.put(SETTING_LASTFM_APIKEY, StringUtils.EMPTY);
+		map.put(SETTING_LASTFM_USERNAME, StringUtils.EMPTY);
+		map.put(SETTING_LASTFM_POLLINGINTERVAL, "10000");
+		return map;
 	}
 
 }
