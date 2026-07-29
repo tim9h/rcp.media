@@ -22,8 +22,8 @@ import dev.tim9h.rcp.controls.IconButton;
 import dev.tim9h.rcp.event.CcEvent;
 import dev.tim9h.rcp.event.EventManager;
 import dev.tim9h.rcp.logging.InjectLogger;
-import dev.tim9h.rcp.media.service.aimp.SongFileWatcher;
 import dev.tim9h.rcp.media.service.bean.CurrentTrackProperties;
+import dev.tim9h.rcp.media.service.gsmtc.MediaWatcherClient;
 import dev.tim9h.rcp.media.service.lastfm.LastFmService;
 import dev.tim9h.rcp.media.service.lastfm.LastFmWatcher;
 import dev.tim9h.rcp.media.service.playback.MediaService;
@@ -71,8 +71,11 @@ public class MediaView implements Plugin {
 	@Inject
 	private MediaService mediaService;
 
+//	@Inject
+//	private SongFileWatcher songWatcher;
+
 	@Inject
-	private SongFileWatcher songWatcher;
+	private MediaWatcherClient mediaWatcher;
 
 	@Inject
 	private Settings settings;
@@ -259,7 +262,8 @@ public class MediaView implements Plugin {
 
 	@Override
 	public void onShutdown() {
-		songWatcher.shutdown();
+//		songWatcher.shutdown();
+		mediaWatcher.shutdown();
 	}
 
 	@Override

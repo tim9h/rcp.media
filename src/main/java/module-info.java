@@ -12,4 +12,5 @@ module rcp.clock {
 	requires transitive rcp.controls;
 	requires lastfm.java;
 	requires org.apache.logging.log4j;
+	requires com.google.gson;
 }
