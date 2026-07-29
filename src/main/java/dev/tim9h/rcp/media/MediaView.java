@@ -47,8 +47,6 @@ import javafx.util.Duration;
 
 public class MediaView implements Plugin {
 
-	public static final String SETTING_CURRENTTRACKINFOPATH = "media.currenttrackinfopath";
-
 	public static final String SETTING_LASTFM_APIKEY = "media.lastfm.apikey";
 
 	public static final String SETTING_LASTFM_USERNAME = "media.lastfm.username";
@@ -70,9 +68,6 @@ public class MediaView implements Plugin {
 
 	@Inject
 	private MediaService mediaService;
-
-//	@Inject
-//	private SongFileWatcher songWatcher;
 
 	@Inject
 	private MediaWatcherClient mediaWatcher;
@@ -262,7 +257,6 @@ public class MediaView implements Plugin {
 
 	@Override
 	public void onShutdown() {
-//		songWatcher.shutdown();
 		mediaWatcher.shutdown();
 	}
 
@@ -405,7 +399,6 @@ public class MediaView implements Plugin {
 	@Override
 	public Map<String, String> getSettingsContributions() {
 		HashMap<String, String> map = new HashMap<>();
-		map.put(SETTING_CURRENTTRACKINFOPATH, StringUtils.EMPTY);
 		map.put(SETTING_LASTFM_APIKEY, StringUtils.EMPTY);
 		map.put(SETTING_LASTFM_USERNAME, StringUtils.EMPTY);
 		map.put(SETTING_LASTFM_POLLINGINTERVAL, "10000");
