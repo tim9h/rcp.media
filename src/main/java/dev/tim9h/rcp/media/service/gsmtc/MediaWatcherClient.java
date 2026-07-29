@@ -156,7 +156,7 @@ public class MediaWatcherClient {
 			}
 
 			var jsonObject = jsonElement.getAsJsonObject();
-			logger.info(() -> jsonObject);
+			logger.debug(() -> "MediaWatcher: " + jsonObject);
 			var eventType = jsonObject.get("event");
 
 			if (eventType == null) {
