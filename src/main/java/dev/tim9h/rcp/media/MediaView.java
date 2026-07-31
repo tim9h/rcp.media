@@ -26,7 +26,6 @@ import dev.tim9h.rcp.media.service.bean.CurrentTrackProperties;
 import dev.tim9h.rcp.media.service.gsmtc.MediaBridgeClient;
 import dev.tim9h.rcp.media.service.lastfm.LastFmService;
 import dev.tim9h.rcp.media.service.lastfm.LastFmWatcher;
-import dev.tim9h.rcp.media.service.playback.MediaService;
 import dev.tim9h.rcp.settings.Settings;
 import dev.tim9h.rcp.spi.Gravity;
 import dev.tim9h.rcp.spi.Mode;
@@ -65,9 +64,6 @@ public class MediaView implements Plugin {
 
 	@InjectLogger
 	private Logger logger;
-
-	@Inject
-	private MediaService mediaService;
 
 	@Inject
 	private MediaBridgeClient mediaBridge;
@@ -129,25 +125,25 @@ public class MediaView implements Plugin {
 
 		btnPrev.setLabel('⏪');
 		btnPrev.setOnAction(_ -> {
-			mediaService.prevSong();
+			mediaBridge.prevSong();
 			eventManager.echo("Previous");
 		});
 
 		btnStop.setLabel('⏹');
 		btnStop.setOnAction(_ -> {
-			mediaService.stop();
+			mediaBridge.stop();
 			eventManager.echo("Stop");
 		});
 
 		btnPlay.setLabel('⏵');
 		btnPlay.setOnAction(_ -> {
-			mediaService.playPause();
+			mediaBridge.playPause();
 			eventManager.echo("Play/Pause");
 		});
 
 		btnNext.setLabel('⏩');
 		btnNext.setOnAction(_ -> {
-			mediaService.nextSong();
+			mediaBridge.nextSong();
 			eventManager.echo("Next");
 		});
 
@@ -267,23 +263,23 @@ public class MediaView implements Plugin {
 		Plugin.super.initBus(eventManager);
 
 		em.listen("next", _ -> {
-			mediaService.nextSong();
+			mediaBridge.nextSong();
 			em.echo("Playing next song");
 		});
 		em.listen("previous", _ -> {
-			mediaService.prevSong();
+			mediaBridge.prevSong();
 			em.echo("Playing previous song");
 		});
 		em.listen("play", _ -> {
-			mediaService.playPause();
+			mediaBridge.playPause();
 			em.echo("Play/Pause music");
 		});
 		em.listen("pause", _ -> {
-			mediaService.playPause();
+			mediaBridge.playPause();
 			em.echo("Play/Pause music");
 		});
 		em.listen("stop", _ -> {
-			mediaService.stop();
+			mediaBridge.stop();
 			em.echo("Stop playing music");
 		});
 		em.listen("np", data -> {
@@ -292,15 +288,15 @@ public class MediaView implements Plugin {
 			}
 		});
 		em.listen("volumeup", _ -> {
-			mediaService.volumeUp();
+			mediaBridge.volumeUp();
 			em.echo("Volume up");
 		});
 		em.listen("volumedown", _ -> {
-			mediaService.volumeDown();
+			mediaBridge.volumeDown();
 			em.echo("Volume down");
 		});
 		em.listen("mute", _ -> {
-			mediaService.mute();
+			mediaBridge.toggleMute();
 			em.echo("Mute");
 		});
 	}

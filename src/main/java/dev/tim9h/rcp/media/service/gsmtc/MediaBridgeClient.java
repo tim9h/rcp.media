@@ -1,9 +1,11 @@
 package dev.tim9h.rcp.media.service.gsmtc;
 
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
@@ -23,6 +25,7 @@ import dev.tim9h.rcp.event.CcEvent;
 import dev.tim9h.rcp.event.EventManager;
 import dev.tim9h.rcp.logging.InjectLogger;
 import dev.tim9h.rcp.media.service.bean.CurrentTrackProperties;
+import dev.tim9h.rcp.media.service.lastfm.LastFmWatcher;
 import javafx.application.Platform;
 
 @Singleton
@@ -47,9 +50,14 @@ public class MediaBridgeClient {
 
 	private BufferedReader reader;
 
+	private BufferedWriter writer;
+
 	private final Gson gson = new Gson();
 
 	private final AtomicBoolean running = new AtomicBoolean(false);
+
+	@Inject
+	private LastFmWatcher watcher;
 
 	@Inject
 	public MediaBridgeClient(Injector injector) {
@@ -68,6 +76,7 @@ public class MediaBridgeClient {
 			logger.info(() -> "Starting MediaBridge from: " + exePath);
 			process = new ProcessBuilder(exePath).start();
 			reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+			writer = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
 
 			running.set(true);
 			readerThread = new Thread(this::readMediaEvents, "MediaBridgeEventReader");
@@ -165,14 +174,27 @@ public class MediaBridgeClient {
 			}
 
 			var event = eventType.getAsString();
-
-			if ("mediaChanged".equals(event)) {
+			switch (event) {
+			case "mediaChanged":
 				handleMediaChanged(jsonObject);
-			} else if ("playbackChanged".equals(event)) {
+				break;
+
+			case "playbackChanged":
 				handlePlaybackChanged(jsonObject);
-			} else {
+				break;
+
+			case "volumeChanged":
+				handleVolumeChanged(jsonObject);
+				break;
+
+			case "commandResult":
+				handleCommandResult(jsonObject);
+				break;
+
+			default:
 				logger.debug(() -> "Unknown event type: " + event);
 			}
+
 		} catch (Exception e) {
 			logger.error(() -> "Error processing media event: " + jsonLine, e);
 		}
@@ -219,6 +241,89 @@ public class MediaBridgeClient {
 		}
 	}
 
+	private void handleCommandResult(JsonObject jsonObject) {
+		try {
+			var success = jsonObject.get("success").getAsBoolean();
+			var command = jsonObject.get("command").getAsString();
+			logger.debug(() -> "Command '" + command + "' completed: " + success);
+		} catch (Exception e) {
+			logger.error(() -> "Error handling commandResult", e);
+		}
+	}
+
+	private void handleVolumeChanged(JsonObject jsonObject) {
+		try {
+			var volume = jsonObject.get("volume").getAsDouble();
+			var muted = jsonObject.get("muted").getAsBoolean();
+			logger.debug(() -> "Volume changed: " + Math.round(volume * 100) + "%, muted=" + muted);
+		} catch (Exception e) {
+			logger.error(() -> "Error handling volumeChanged", e);
+		}
+	}
+
+	private void sendCommand(String command) {
+		sendCommand(command, null);
+	}
+
+	private synchronized void sendCommand(String command, Double value) {
+		if (writer == null) {
+			logger.warn(() -> "MediaBridge is not running.");
+			return;
+		}
+		try {
+			var json = new JsonObject();
+			json.addProperty("command", command);
+
+			if (value != null) {
+				json.addProperty("value", value);
+			}
+
+			var line = gson.toJson(json);
+			logger.debug(() -> "MediaBridge stdin: " + line);
+			writer.write(line);
+			writer.newLine();
+			writer.flush();
+		} catch (IOException e) {
+			logger.error(() -> "Failed to send command to MediaBridge", e);
+		}
+	}
+
+	public void prevSong() {
+		sendCommand("previous");
+		watcher.updatePropertiesAsync();
+	}
+
+	public void stop() {
+		sendCommand("stop");
+		watcher.updatePropertiesAsync();
+	}
+
+	public void playPause() {
+		sendCommand("togglePlayPause");
+		watcher.updatePropertiesAsync();
+	}
+
+	public void nextSong() {
+		sendCommand("next");
+		watcher.updatePropertiesAsync();
+	}
+
+	public void volumeUp() {
+		sendCommand("vol+");
+	}
+
+	public void volumeDown() {
+		sendCommand("vol-");
+	}
+
+	public void toggleMute() {
+		sendCommand("toggleMute");
+	}
+
+	public void setVolume(double volume) {
+		sendCommand("setVolume", volume);
+	}
+
 	public void shutdown() {
 		logger.debug(() -> "Shutting down MediaBridge");
 		running.set(false);
@@ -236,12 +341,19 @@ public class MediaBridgeClient {
 			}
 		}
 
-		// Close the reader (this will unblock readLine)
+		// Close the reader/writer streams
 		if (reader != null) {
 			try {
 				reader.close();
 			} catch (IOException e) {
 				logger.error(() -> "Error closing reader", e);
+			}
+		}
+		if (writer != null) {
+			try {
+				writer.close();
+			} catch (IOException e) {
+				logger.error(() -> "Error closing writer", e);
 			}
 		}
 
