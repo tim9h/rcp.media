@@ -23,7 +23,7 @@ import dev.tim9h.rcp.event.CcEvent;
 import dev.tim9h.rcp.event.EventManager;
 import dev.tim9h.rcp.logging.InjectLogger;
 import dev.tim9h.rcp.media.service.bean.CurrentTrackProperties;
-import dev.tim9h.rcp.media.service.gsmtc.MediaWatcherClient;
+import dev.tim9h.rcp.media.service.gsmtc.MediaBridgeClient;
 import dev.tim9h.rcp.media.service.lastfm.LastFmService;
 import dev.tim9h.rcp.media.service.lastfm.LastFmWatcher;
 import dev.tim9h.rcp.media.service.playback.MediaService;
@@ -70,7 +70,7 @@ public class MediaView implements Plugin {
 	private MediaService mediaService;
 
 	@Inject
-	private MediaWatcherClient mediaWatcher;
+	private MediaBridgeClient mediaBridge;
 
 	@Inject
 	private Settings settings;
@@ -257,7 +257,7 @@ public class MediaView implements Plugin {
 
 	@Override
 	public void onShutdown() {
-		mediaWatcher.shutdown();
+		mediaBridge.shutdown();
 	}
 
 	@Override
