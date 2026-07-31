@@ -217,6 +217,8 @@ public class MediaView implements Plugin {
 
 		lblAlbum.disableProperty().bind(currentTrack.getNowPlayingProperty().not());
 		lblArtist.disableProperty().bind(currentTrack.getNowPlayingProperty().not());
+
+		btnPlay.bindLabel(Bindings.when(currentTrack.getNowPlayingProperty()).then("⏸").otherwise("⏵"));
 	}
 
 	private void openUrl(String url, String... params) {
