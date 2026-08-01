@@ -284,6 +284,7 @@ public class MediaBridgeClient {
 			writer.newLine();
 			writer.flush();
 		} catch (IOException e) {
+			eventManager.echoAsync("Error communicating with MediaBridge", e.getMessage());
 			logger.error(() -> "Failed to send command to MediaBridge", e);
 		}
 	}

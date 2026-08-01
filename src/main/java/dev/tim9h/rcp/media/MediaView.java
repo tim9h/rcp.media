@@ -135,7 +135,7 @@ public class MediaView implements Plugin {
 			eventManager.echo("Stop");
 		});
 
-		btnPlay.setLabel('⏵');
+		btnPlay.setLabel('⏯');
 		btnPlay.setOnAction(_ -> {
 			mediaBridge.playPause();
 			eventManager.echo("Play/Pause");
