@@ -262,24 +262,29 @@ public class MediaView implements Plugin {
 	public void initBus(EventManager em) {
 		Plugin.super.initBus(eventManager);
 
-		em.listen("next", _ -> {
-			mediaBridge.nextSong();
+		em.listen("next", data -> {
+			var correlationId = extractCorrelationId(data);
+			mediaBridge.nextSongWithResponse(correlationId);
 			em.echo("Playing next song");
 		});
-		em.listen("previous", _ -> {
-			mediaBridge.prevSong();
+		em.listen("previous", data -> {
+			var correlationId = extractCorrelationId(data);
+			mediaBridge.prevSongWithResponse(correlationId);
 			em.echo("Playing previous song");
 		});
-		em.listen("play", _ -> {
-			mediaBridge.playPause();
+		em.listen("play", data -> {
+			var correlationId = extractCorrelationId(data);
+			mediaBridge.playPauseWithResponse(correlationId);
 			em.echo("Play/Pause music");
 		});
-		em.listen("pause", _ -> {
-			mediaBridge.playPause();
+		em.listen("pause", data -> {
+			var correlationId = extractCorrelationId(data);
+			mediaBridge.playPauseWithResponse(correlationId);
 			em.echo("Play/Pause music");
 		});
-		em.listen("stop", _ -> {
-			mediaBridge.stop();
+		em.listen("stop", data -> {
+			var correlationId = extractCorrelationId(data);
+			mediaBridge.stopWithResponse(correlationId);
 			em.echo("Stop playing music");
 		});
 		em.listen("np", data -> {
@@ -287,18 +292,36 @@ public class MediaView implements Plugin {
 				lastFmWatcher.updatePropertiesAsync();
 			}
 		});
-		em.listen("volumeup", _ -> {
-			mediaBridge.volumeUp();
+		em.listen("volumeup", data -> {
+			var correlationId = extractCorrelationId(data);
+			mediaBridge.volumeUpWithResponse(correlationId);
 			em.echo("Volume up");
 		});
-		em.listen("volumedown", _ -> {
-			mediaBridge.volumeDown();
+		em.listen("volumedown", data -> {
+			var correlationId = extractCorrelationId(data);
+			mediaBridge.volumeDownWithResponse(correlationId);
 			em.echo("Volume down");
 		});
-		em.listen("mute", _ -> {
-			mediaBridge.toggleMute();
+		em.listen("mute", data -> {
+			var correlationId = extractCorrelationId(data);
+			mediaBridge.toggleMuteWithResponse(correlationId);
 			em.echo("Mute");
 		});
+	}
+
+	/**
+	 * Extract correlation ID from event payload if present (first element).
+	 * When using postRequest, the first element is the correlation ID.
+	 */
+	private String extractCorrelationId(Object[] data) {
+		if (data != null && data.length > 0 && data[0] instanceof String) {
+			var firstElement = (String) data[0];
+			// Correlation IDs from webapi start with "webapi-"
+			if (firstElement.startsWith("webapi-")) {
+				return firstElement;
+			}
+		}
+		return null;
 	}
 
 	@Override
