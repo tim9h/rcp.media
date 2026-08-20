@@ -6,10 +6,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -36,6 +37,32 @@ public class MediaBridgeClient {
 
 	private static final String MEDIA_BRIDGE_EXE = "MediaBridge.exe";
 
+	private static final String MEDIA_BRIDGE_RESOURCE = "/native/windows/" + MEDIA_BRIDGE_EXE;
+
+	private static final String EVENT_MEDIA_CHANGED = "mediaChanged";
+
+	private static final String EVENT_PLAYBACK_CHANGED = "playbackChanged";
+
+	private static final String EVENT_VOLUME_CHANGED = "volumeChanged";
+
+	private static final String EVENT_COMMAND_RESULT = "commandResult";
+
+	private static final String COMMAND_PREVIOUS = "previous";
+
+	private static final String COMMAND_STOP = "stop";
+
+	private static final String COMMAND_TOGGLE_PLAY_PAUSE = "togglePlayPause";
+
+	private static final String COMMAND_NEXT = "next";
+
+	private static final String COMMAND_VOLUME_UP = "vol+";
+
+	private static final String COMMAND_VOLUME_DOWN = "vol-";
+
+	private static final String COMMAND_TOGGLE_MUTE = "toggleMute";
+
+	private static final String COMMAND_SET_VOLUME = "setVolume";
+
 	@InjectLogger
 	private Logger logger;
 
@@ -45,7 +72,26 @@ public class MediaBridgeClient {
 	@Inject
 	private CurrentTrackProperties currentTrack;
 
-	private double lastVolume = 0.5;
+	@Inject
+	private LastFmWatcher watcher;
+
+	private final Gson gson = new Gson();
+
+	private final AtomicBoolean running = new AtomicBoolean(false);
+
+	private final AtomicLong requestIdCounter = new AtomicLong();
+
+	/*
+	 * MediaBridge currently processes commands sequentially and may omit a
+	 * correlationId in responses. These queues preserve the matching order.
+	 */
+	private final ConcurrentLinkedQueue<String> pendingCommandResults = new ConcurrentLinkedQueue<>();
+
+	private final ConcurrentLinkedQueue<String> pendingMediaEvents = new ConcurrentLinkedQueue<>();
+
+	private final ConcurrentLinkedQueue<String> pendingVolumeEvents = new ConcurrentLinkedQueue<>();
+
+	private volatile double lastVolume = 0.5;
 
 	private Process process;
 
@@ -57,23 +103,6 @@ public class MediaBridgeClient {
 
 	private BufferedWriter writer;
 
-	private final Gson gson = new Gson();
-
-	private final AtomicBoolean running = new AtomicBoolean(false);
-
-	@Inject
-	private LastFmWatcher watcher;
-
-	// Track pending requests in order: queue of correlationIds
-	private final ConcurrentLinkedQueue<String> pendingRequestQueue = new ConcurrentLinkedQueue<>();
-
-	// Track pending command results that are waiting for mediaChanged event
-	private final ConcurrentHashMap<String, String> pendingMediaCommands = new ConcurrentHashMap<>();
-
-	private final ConcurrentHashMap<String, String> pendingVolumeCommands = new ConcurrentHashMap<>();
-
-	private final AtomicLong requestIdCounter = new AtomicLong(0);
-
 	@Inject
 	public MediaBridgeClient(Injector injector) {
 		injector.injectMembers(this);
@@ -82,27 +111,21 @@ public class MediaBridgeClient {
 
 	private void startMediaBridge() {
 		try {
-			var exePath = extractMediaBridge();
-			if (exePath == null) {
-				logger.error(() -> "Failed to extract MediaBridge.exe");
+			var executable = extractMediaBridge();
+			if (executable == null) {
+				logger.error(() -> "Failed to extract " + MEDIA_BRIDGE_EXE);
 				return;
 			}
 
-			logger.info(() -> "Starting MediaBridge from: " + exePath);
-			process = new ProcessBuilder(exePath).start();
-			reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-			writer = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
+			logger.info(() -> "Starting MediaBridge from: " + executable);
+			process = new ProcessBuilder(executable.toString()).start();
+			reader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
+			writer = new BufferedWriter(new OutputStreamWriter(process.getOutputStream(), StandardCharsets.UTF_8));
 
 			running.set(true);
-			readerThread = new Thread(this::readMediaEvents, "MediaBridgeEventReader");
-			readerThread.setDaemon(true);
-			readerThread.start();
-
-			// capture stderr to the log to aid debugging
-			var errStream = process.getErrorStream();
-			stderrThread = new Thread(() -> readStreamErrors(errStream), "MediaBridgeStderrReader");
-			stderrThread.setDaemon(true);
-			stderrThread.start();
+			readerThread = startDaemonThread(this::readMediaEvents, "MediaBridgeEventReader");
+			stderrThread = startDaemonThread(() -> readStreamErrors(process.getErrorStream()),
+					"MediaBridgeStderrReader");
 
 			logger.info(() -> "MediaBridge started successfully");
 		} catch (IOException e) {
@@ -110,37 +133,36 @@ public class MediaBridgeClient {
 		}
 	}
 
-	private String extractMediaBridge() {
+	private Thread startDaemonThread(Runnable task, String name) {
+		var thread = new Thread(task, name);
+		thread.setDaemon(true);
+		thread.start();
+		return thread;
+	}
+
+	private Path extractMediaBridge() {
 		try {
-			var homeDir = System.getProperty("user.home");
-			var rcpDir = Paths.get(homeDir, "rcp");
-			var exeFile = rcpDir.resolve(MEDIA_BRIDGE_EXE);
+			var rcpDirectory = Paths.get(System.getProperty("user.home"), "rcp");
+			var executable = rcpDirectory.resolve(MEDIA_BRIDGE_EXE);
 
-			// Create rcp directory if it doesn't exist
-			if (!Files.exists(rcpDir)) {
-				Files.createDirectories(rcpDir);
-				logger.info(() -> "Created directory: " + rcpDir);
-			}
+			Files.createDirectories(rcpDirectory);
 
-			// Extract exe only if it doesn't exist
-			if (!Files.exists(exeFile)) {
-				var resourceStream = getClass().getResourceAsStream("/native/windows/" + MEDIA_BRIDGE_EXE);
-				if (resourceStream == null) {
-					logger.error(() -> "MediaBridge.exe not found in resources");
-					return null;
-				}
-
-				try (resourceStream) {
-					Files.copy(resourceStream, exeFile, StandardCopyOption.REPLACE_EXISTING);
-					logger.info(() -> "Extracted MediaBridge.exe to: " + exeFile);
+			if (Files.notExists(executable)) {
+				try (var resource = getClass().getResourceAsStream(MEDIA_BRIDGE_RESOURCE)) {
+					if (resource == null) {
+						logger.error(() -> MEDIA_BRIDGE_EXE + " not found in resources");
+						return null;
+					}
+					Files.copy(resource, executable, StandardCopyOption.REPLACE_EXISTING);
+					logger.info("Extracted " + MEDIA_BRIDGE_EXE + " to " + executable);
 				}
 			} else {
-				logger.info(() -> "MediaBridge.exe already exists at: " + exeFile);
+				logger.info(() -> MEDIA_BRIDGE_EXE + " already exists at: " + executable);
 			}
 
-			return exeFile.toAbsolutePath().toString();
+			return executable.toAbsolutePath();
 		} catch (IOException e) {
-			logger.error(() -> "Error extracting MediaBridge.exe", e);
+			logger.error(() -> "Error extracting " + MEDIA_BRIDGE_EXE, e);
 			return null;
 		}
 	}
@@ -155,13 +177,18 @@ public class MediaBridgeClient {
 			if (running.get()) {
 				logger.error(() -> "Error reading media events", e);
 			}
+		} finally {
+			if (running.get()) {
+				logger.warn(() -> "MediaBridge output stream closed unexpectedly");
+				running.set(false);
+			}
 		}
 	}
 
-	private void readStreamErrors(InputStream is) {
-		try (var br = new BufferedReader(new InputStreamReader(is))) {
+	private void readStreamErrors(InputStream input) {
+		try (var stderr = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))) {
 			String line;
-			while ((line = br.readLine()) != null) {
+			while ((line = stderr.readLine()) != null) {
 				logger.warn("MediaBridge stderr: " + line);
 			}
 		} catch (IOException e) {
@@ -173,405 +200,346 @@ public class MediaBridgeClient {
 
 	private void processMediaEvent(String jsonLine) {
 		try {
-			var jsonElement = JsonParser.parseString(jsonLine);
-			if (!jsonElement.isJsonObject()) {
-				logger.warn(() -> "Invalid JSON event format");
+			var element = JsonParser.parseString(jsonLine);
+			if (!element.isJsonObject()) {
+				logger.warn(() -> "Invalid JSON event format: {}" + jsonLine);
 				return;
 			}
 
-			var jsonObject = jsonElement.getAsJsonObject();
-			logger.debug(() -> "MediaBridge: " + jsonObject);
-			var eventType = jsonObject.get("event");
+			var json = element.getAsJsonObject();
+			logger.debug(() -> "MediaBridge: " + json);
 
-			if (eventType == null) {
-				logger.warn(() -> "Missing 'event' field in JSON");
+			var eventElement = json.get("event");
+			if (eventElement == null || eventElement.isJsonNull()) {
+				logger.warn(() -> "Missing 'event' field in JSON: " + jsonLine);
 				return;
 			}
 
-			// Extract correlation ID if present (for request/response pattern)
-			var correlationId = jsonObject.has("correlationId") ? jsonObject.get("correlationId").getAsString() : null;
-
-			var event = eventType.getAsString();
-			switch (event) {
-			case "mediaChanged":
-				handleMediaChanged(jsonObject, correlationId);
-				break;
-
-			case "playbackChanged":
-				handlePlaybackChanged(jsonObject, correlationId);
-				break;
-
-			case "volumeChanged":
-				handleVolumeChanged(jsonObject, correlationId);
-				break;
-
-			case "commandResult":
-				handleCommandResult(jsonObject, correlationId);
-				break;
-
-			default:
-				logger.debug(() -> "Unknown event type: " + event);
+			var correlationId = getOptionalString(json, "correlationId");
+			switch (eventElement.getAsString()) {
+			case EVENT_MEDIA_CHANGED -> handleMediaChanged(json, correlationId);
+			case EVENT_PLAYBACK_CHANGED -> handlePlaybackChanged(json, correlationId);
+			case EVENT_VOLUME_CHANGED -> handleVolumeChanged(json, correlationId);
+			case EVENT_COMMAND_RESULT -> handleCommandResult(json, correlationId);
+			default -> logger.debug(() -> "Unknown event type: " + eventElement.getAsString());
 			}
-
 		} catch (Exception e) {
 			logger.error(() -> "Error processing media event: " + jsonLine, e);
 		}
 	}
 
-	private void handleMediaChanged(JsonObject jsonObject, String correlationId) {
+	private String getOptionalString(JsonObject json, String property) {
+		var value = json.get(property);
+		return value == null || value.isJsonNull() ? null : value.getAsString();
+	}
+
+	private void handleMediaChanged(JsonObject json, String correlationId) {
+		String responseId = resolveEventCorrelationId(correlationId, pendingMediaEvents, EVENT_MEDIA_CHANGED);
 		try {
-			var mediaEvent = gson.fromJson(jsonObject, MediaChangedEvent.class);
-			var title = mediaEvent.title();
-			var artist = mediaEvent.artist();
-			var album = mediaEvent.album();
-			var isPlaying = "Playing".equalsIgnoreCase(mediaEvent.state());
+			var event = gson.fromJson(json, MediaChangedEvent.class);
+			var title = event.title();
+			var artist = event.artist();
+			var album = event.album();
+			var playing = "Playing".equalsIgnoreCase(event.state());
 
 			logger.debug(() -> "Media changed: " + title + " - " + artist);
+			updateCurrentTrack(title, artist, album, playing);
 
-			Platform.runLater(() -> {
-				currentTrack.getTitleProperty().set(title);
-				currentTrack.getArtistProperty().set(artist);
-				currentTrack.getAlbumProperty().set(album);
-				currentTrack.getNowPlayingProperty().set(isPlaying);
-				eventManager.post(new CcEvent("np", title, artist, album, isPlaying));
-			});
-
-			// Determine which correlation ID to use for response
-			final String finalCorrelationId;
-			if (correlationId != null) {
-				finalCorrelationId = correlationId;
-			} else if (!pendingMediaCommands.isEmpty()) {
-				// Get the first pending media command (FIFO order)
-				var iterator = pendingMediaCommands.keySet().iterator();
-				if (iterator.hasNext()) {
-					finalCorrelationId = iterator.next();
-					logger.debug(() -> "Matched mediaChanged to pending media command with correlation ID: "
-							+ finalCorrelationId);
-				} else {
-					finalCorrelationId = null;
-				}
-			} else {
-				finalCorrelationId = null;
-			}
-
-			// Post response with track info if correlation ID present
-			if (finalCorrelationId != null) {
-				pendingMediaCommands.remove(finalCorrelationId);
-				eventManager.postResponse(finalCorrelationId, "success", title, artist, album, isPlaying);
+			if (responseId != null) {
+				eventManager.postResponse(responseId, "success", title, artist, album, playing);
 			}
 		} catch (Exception e) {
 			logger.error(() -> "Error handling mediaChanged event", e);
-			// If there's a pending command, respond with error
-			if (!pendingMediaCommands.isEmpty()) {
-				var iterator = pendingMediaCommands.keySet().iterator();
-				if (iterator.hasNext()) {
-					var pendingCorrelationId = iterator.next();
-					pendingMediaCommands.remove(pendingCorrelationId);
-					eventManager.postResponse(pendingCorrelationId, "error", e.getMessage());
-				}
-			}
+			postError(responseId, e);
 		}
 	}
 
-	private void handlePlaybackChanged(JsonObject jsonObject, String correlationId) {
+	private void handlePlaybackChanged(JsonObject json, String correlationId) {
+		var responseId = resolveEventCorrelationId(correlationId, pendingMediaEvents, EVENT_PLAYBACK_CHANGED);
 		try {
-			var playbackEvent = gson.fromJson(jsonObject, PlaybackChangedEvent.class);
-			var state = playbackEvent.state();
-			var isPlaying = "Playing".equalsIgnoreCase(state);
+			var event = gson.fromJson(json, PlaybackChangedEvent.class);
+			var playing = "Playing".equalsIgnoreCase(event.state());
 
-			logger.debug(() -> "Playback changed: " + state);
+			logger.debug(() -> "Playback changed: " + event.state());
+			updatePlaybackState(playing);
 
-			Platform.runLater(() -> {
-				currentTrack.getNowPlayingProperty().set(isPlaying);
-				// Post np event with current values
-				eventManager.post(new CcEvent("np", currentTrack.getTitleProperty().get(),
-						currentTrack.getArtistProperty().get(), currentTrack.getAlbumProperty().get(), isPlaying));
-			});
-
-			// Determine which correlation ID to use for response
-			final String finalCorrelationId;
-			if (correlationId != null) {
-				finalCorrelationId = correlationId;
-			} else if (!pendingMediaCommands.isEmpty()) {
-				// Get the first pending media command (FIFO order)
-				var iterator = pendingMediaCommands.keySet().iterator();
-				if (iterator.hasNext()) {
-					finalCorrelationId = iterator.next();
-					logger.debug(() -> "Matched playbackChanged to pending media command with correlation ID: "
-							+ finalCorrelationId);
-				} else {
-					finalCorrelationId = null;
-				}
-			} else {
-				finalCorrelationId = null;
-			}
-
-			// Post response with track info if correlation ID present
-			if (finalCorrelationId != null) {
-				pendingMediaCommands.remove(finalCorrelationId);
-				// Use current track properties or the provided state
-				eventManager.postResponse(finalCorrelationId, "success", currentTrack.getTitleProperty().get(),
-						currentTrack.getArtistProperty().get(), currentTrack.getAlbumProperty().get(), isPlaying);
+			if (responseId != null) {
+				eventManager.postResponse(responseId, "success", currentTrack.getTitleProperty().get(),
+						currentTrack.getArtistProperty().get(), currentTrack.getAlbumProperty().get(), playing);
 			}
 		} catch (Exception e) {
 			logger.error(() -> "Error handling playbackChanged event", e);
-			// If there's a pending command, respond with error
-			if (!pendingMediaCommands.isEmpty()) {
-				var iterator = pendingMediaCommands.keySet().iterator();
-				if (iterator.hasNext()) {
-					var pendingCorrelationId = iterator.next();
-					pendingMediaCommands.remove(pendingCorrelationId);
-					eventManager.postResponse(pendingCorrelationId, "error", e.getMessage());
-				}
-			}
+			postError(responseId, e);
 		}
 	}
 
-	private void handleVolumeChanged(JsonObject jsonObject, String correlationId) {
+	private void handleVolumeChanged(JsonObject json, String correlationId) {
+		var responseId = resolveEventCorrelationId(correlationId, pendingVolumeEvents, EVENT_VOLUME_CHANGED);
 		try {
-			lastVolume = jsonObject.get("volume").getAsDouble();
-			var muted = jsonObject.get("muted").getAsBoolean();
+			lastVolume = json.get("volume").getAsDouble();
+			var muted = json.get("muted").getAsBoolean();
+
 			logger.debug(() -> "Volume changed: " + Math.round(lastVolume * 100) + "%, muted=" + muted);
-
-			final String finalCorrelationId;
-			if (correlationId != null) {
-				finalCorrelationId = correlationId;
-			} else if (!pendingVolumeCommands.isEmpty()) {
-				// Get the first pending volume command (FIFO order)
-				var iterator = pendingVolumeCommands.keySet().iterator();
-				if (iterator.hasNext()) {
-					finalCorrelationId = iterator.next();
-				} else {
-					finalCorrelationId = null;
-				}
-			} else {
-				finalCorrelationId = null;
-			}
-
-			if (finalCorrelationId != null) {
-				pendingVolumeCommands.remove(finalCorrelationId);
-				eventManager.postResponse(finalCorrelationId, "success", lastVolume, muted);
+			if (responseId != null) {
+				eventManager.postResponse(responseId, "success", lastVolume, muted);
 			}
 		} catch (Exception e) {
-			logger.error(() -> "Error handling volumeChanged", e);
-			if (!pendingVolumeCommands.isEmpty()) {
-				var iterator = pendingVolumeCommands.keySet().iterator();
-				if (iterator.hasNext()) {
-					var pendingCorrelationId = iterator.next();
-					pendingVolumeCommands.remove(pendingCorrelationId);
-					eventManager.postResponse(pendingCorrelationId, "error", e.getMessage());
-				}
-			}
+			logger.error(() -> "Error handling volumeChanged event", e);
+			postError(responseId, e);
 		}
 	}
 
-	private void handleCommandResult(JsonObject jsonObject, String correlationId) {
+	private String resolveEventCorrelationId(String suppliedId, ConcurrentLinkedQueue<String> pendingEvents,
+			String eventName) {
+		if (suppliedId != null) {
+			pendingEvents.remove(suppliedId);
+			return suppliedId;
+		}
+
+		var queuedId = pendingEvents.poll();
+		if (queuedId != null) {
+			logger.debug(() -> "Matched " + eventName + " to pending request with correlation ID: " + queuedId);
+		}
+		return queuedId;
+	}
+
+	private void handleCommandResult(JsonObject json, String correlationId) {
+		var responseId = resolveCommandResultCorrelationId(correlationId);
 		try {
-			var success = jsonObject.get("success").getAsBoolean();
-			var command = jsonObject.get("command").getAsString();
+			var success = json.get("success").getAsBoolean();
+			var command = json.get("command").getAsString();
 			logger.debug(() -> "Command '" + command + "' completed: " + success);
 
-			// If correlationId is not in the response, try to get it from the pending queue
-			var finalCorrelationId = correlationId != null ? correlationId : pendingRequestQueue.poll();
+			if (responseId == null) {
+				logger.debug(() -> "Ignoring untracked command result for " + command);
+				return;
+			}
 
-			if (finalCorrelationId != null) {
-				if (correlationId == null) {
-					logger.debug(
-							() -> "Matched response to pending request with correlation ID: " + finalCorrelationId);
-				}
+			if (!success) {
+				removePendingEvent(responseId);
+				eventManager.postResponse(responseId, "failed", command);
+				return;
+			}
 
-				// For media-changing commands, check if we should wait for
-				// mediaChanged/playbackChanged or respond immediately
-				if (isMediaCommand(command) && success) {
-					// "stop" might not trigger playbackChanged, so respond immediately with current
-					// track state
-					if ("stop".equals(command)) { // stop means not playing
-						eventManager.postResponse(finalCorrelationId, "success", currentTrack.getTitleProperty().get(),
-								currentTrack.getArtistProperty().get(), currentTrack.getAlbumProperty().get(), false);
-						logger.debug(() -> "Responding immediately to stop command");
-					} else {
-						// For other media commands, wait for mediaChanged or playbackChanged event
-						pendingMediaCommands.put(finalCorrelationId, command);
-						logger.debug(() -> "Storing pending media command for correlation ID: " + finalCorrelationId);
-					}
-				} else if (isVolumeCommand(command)) {
-					if (!success) {
-						pendingVolumeCommands.remove(finalCorrelationId);
-						eventManager.postResponse(finalCorrelationId, "failed", command);
-					}
-				} else {
-					// Non-media commands: respond immediately
-					eventManager.postResponse(finalCorrelationId, success ? "success" : "failed", command);
-				}
+			if (COMMAND_STOP.equals(command)) {
+				eventManager.postResponse(responseId, "success", currentTrack.getTitleProperty().get(),
+						currentTrack.getArtistProperty().get(), currentTrack.getAlbumProperty().get(), false);
+				return;
+			}
+
+			/*
+			 * Media and volume commands were registered before they were sent. Their
+			 * corresponding state-change event completes the request.
+			 */
+			if (!isMediaCommand(command) && !isVolumeCommand(command)) {
+				eventManager.postResponse(responseId, "success", command);
 			}
 		} catch (Exception e) {
 			logger.error(() -> "Error handling commandResult", e);
-			// Try to use a pending correlation ID
-			var pendingCorrelationId = pendingRequestQueue.poll();
-			if (pendingCorrelationId != null) {
-				eventManager.postResponse(pendingCorrelationId, "error", e.getMessage());
-			}
+			removePendingEvent(responseId);
+			postError(responseId, e);
+		}
+	}
+
+	private String resolveCommandResultCorrelationId(String suppliedId) {
+		if (suppliedId != null) {
+			pendingCommandResults.remove(suppliedId);
+			return suppliedId;
+		}
+
+		var queuedId = pendingCommandResults.poll();
+		if (queuedId != null) {
+			logger.debug(() -> "Matched commandResult to pending request with correlation ID: " + queuedId);
+		}
+		return queuedId;
+	}
+
+	private void updateCurrentTrack(String title, String artist, String album, boolean playing) {
+		Platform.runLater(() -> {
+			currentTrack.getTitleProperty().set(title);
+			currentTrack.getArtistProperty().set(artist);
+			currentTrack.getAlbumProperty().set(album);
+			currentTrack.getNowPlayingProperty().set(playing);
+			eventManager.post(new CcEvent("np", title, artist, album, playing));
+		});
+	}
+
+	private void updatePlaybackState(boolean playing) {
+		Platform.runLater(() -> {
+			currentTrack.getNowPlayingProperty().set(playing);
+			eventManager.post(new CcEvent("np", currentTrack.getTitleProperty().get(),
+					currentTrack.getArtistProperty().get(), currentTrack.getAlbumProperty().get(), playing));
+		});
+	}
+
+	private void postError(String correlationId, Exception error) {
+		if (correlationId != null) {
+			eventManager.postResponse(correlationId, "error", error.getMessage());
 		}
 	}
 
 	private static boolean isMediaCommand(String command) {
-		return command != null && ("next".equals(command) || "previous".equals(command)
-				|| "togglePlayPause".equals(command) || "stop".equals(command));
+		return COMMAND_NEXT.equals(command) || COMMAND_PREVIOUS.equals(command)
+				|| COMMAND_TOGGLE_PLAY_PAUSE.equals(command) || COMMAND_STOP.equals(command);
 	}
 
 	private static boolean isVolumeCommand(String command) {
-		return command != null && ("vol+".equals(command) || "vol-".equals(command) || "toggleMute".equals(command)
-				|| "setVolume".equals(command));
+		return COMMAND_VOLUME_UP.equals(command) || COMMAND_VOLUME_DOWN.equals(command)
+				|| COMMAND_TOGGLE_MUTE.equals(command) || COMMAND_SET_VOLUME.equals(command);
 	}
 
 	private void sendCommand(String command) {
 		sendCommand(command, null, null);
 	}
 
-	private synchronized void sendCommand(String command, Double value) {
+	private void sendCommand(String command, Double value) {
 		sendCommand(command, value, null);
 	}
 
 	private synchronized void sendCommand(String command, Double value, String correlationId) {
-		if (writer == null) {
-			logger.warn(() -> "MediaBridge is not running.");
+		if (!running.get() || writer == null || process == null || !process.isAlive()) {
+			logger.warn(() -> "MediaBridge is not running");
+			if (correlationId != null) {
+				eventManager.postResponse(correlationId, "error", "MediaBridge is not running");
+			}
 			return;
 		}
 
+		var json = new JsonObject();
+		json.addProperty("command", command);
+		if (value != null) {
+			json.addProperty("value", value);
+		}
+		if (correlationId != null) {
+			json.addProperty("correlationId", correlationId);
+			registerPendingRequest(command, correlationId);
+		}
+
 		try {
-			var json = new JsonObject();
-			json.addProperty("command", command);
-
-			if (value != null) {
-				json.addProperty("value", value);
-			}
-
-			if (correlationId != null) {
-				json.addProperty("correlationId", correlationId);
-				pendingRequestQueue.offer(correlationId);
-
-				// Register before sending, because volumeChanged may arrive first.
-				if (isVolumeCommand(command)) {
-					pendingVolumeCommands.put(correlationId, command);
-				} else if (isMediaCommand(command) && !"stop".equals(command)) {
-					pendingMediaCommands.put(correlationId, command);
-				}
-
-				logger.debug(() -> "Tracking pending request with correlation ID: " + correlationId);
-			}
-
+			logger.debug(() -> "MediaBridge stdin: " + json);
 			writer.write(gson.toJson(json));
 			writer.newLine();
 			writer.flush();
 		} catch (IOException e) {
-			if (correlationId != null) {
-				pendingRequestQueue.remove(correlationId);
-				pendingVolumeCommands.remove(correlationId);
-				pendingMediaCommands.remove(correlationId);
-			}
-
+			removePendingRequest(correlationId);
 			eventManager.echoAsync("Error communicating with MediaBridge", e.getMessage());
 			logger.error(() -> "Failed to send command to MediaBridge", e);
+			postError(correlationId, e);
 		}
 	}
 
+	private void registerPendingRequest(String command, String correlationId) {
+		pendingCommandResults.offer(correlationId);
+
+		// Register before writing: state-change events can arrive before commandResult.
+		if (isVolumeCommand(command)) {
+			pendingVolumeEvents.offer(correlationId);
+		} else if (isMediaCommand(command) && !COMMAND_STOP.equals(command)) {
+			pendingMediaEvents.offer(correlationId);
+		}
+
+		logger.debug(() -> "Tracking pending request with correlation ID: " + correlationId);
+	}
+
+	private void removePendingRequest(String correlationId) {
+		if (correlationId == null) {
+			return;
+		}
+		pendingCommandResults.remove(correlationId);
+		removePendingEvent(correlationId);
+	}
+
+	private void removePendingEvent(String correlationId) {
+		if (correlationId == null) {
+			return;
+		}
+		pendingMediaEvents.remove(correlationId);
+		pendingVolumeEvents.remove(correlationId);
+	}
+
 	public void prevSong() {
-		sendCommand("previous");
-		watcher.updatePropertiesAsync();
+		sendMediaCommand(COMMAND_PREVIOUS, null);
 	}
 
 	public void prevSongWithResponse(String correlationId) {
-		sendCommand("previous", null, correlationId);
-		watcher.updatePropertiesAsync();
+		sendMediaCommand(COMMAND_PREVIOUS, correlationId);
 	}
 
 	public void stop() {
-		sendCommand("stop");
-		watcher.updatePropertiesAsync();
+		sendMediaCommand(COMMAND_STOP, null);
 	}
 
 	public void stopWithResponse(String correlationId) {
-		sendCommand("stop", null, correlationId);
-		watcher.updatePropertiesAsync();
+		sendMediaCommand(COMMAND_STOP, correlationId);
 	}
 
 	public void playPause() {
-		sendCommand("togglePlayPause");
-		watcher.updatePropertiesAsync();
+		sendMediaCommand(COMMAND_TOGGLE_PLAY_PAUSE, null);
 	}
 
 	public void playPauseWithResponse(String correlationId) {
-		sendCommand("togglePlayPause", null, correlationId);
-		watcher.updatePropertiesAsync();
+		sendMediaCommand(COMMAND_TOGGLE_PLAY_PAUSE, correlationId);
 	}
 
 	public void nextSong() {
-		sendCommand("next");
-		watcher.updatePropertiesAsync();
+		sendMediaCommand(COMMAND_NEXT, null);
 	}
 
 	public void nextSongWithResponse(String correlationId) {
-		sendCommand("next", null, correlationId);
+		sendMediaCommand(COMMAND_NEXT, correlationId);
+	}
+
+	private void sendMediaCommand(String command, String correlationId) {
+		sendCommand(command, null, correlationId);
 		watcher.updatePropertiesAsync();
 	}
 
 	public void volumeUp() {
-		sendCommand("vol+");
+		sendCommand(COMMAND_VOLUME_UP);
 	}
 
 	public void volumeUpWithResponse(String correlationId) {
-		sendCommand("vol+", null, correlationId);
+		sendCommand(COMMAND_VOLUME_UP, null, correlationId);
 	}
 
 	public void volumeDown() {
-		sendCommand("vol-");
+		sendCommand(COMMAND_VOLUME_DOWN);
 	}
 
 	public void volumeDownWithResponse(String correlationId) {
-		sendCommand("vol-", null, correlationId);
+		sendCommand(COMMAND_VOLUME_DOWN, null, correlationId);
 	}
 
 	public void toggleMute() {
-		sendCommand("toggleMute");
+		sendCommand(COMMAND_TOGGLE_MUTE);
 	}
 
 	public void toggleMuteWithResponse(String correlationId) {
-		sendCommand("toggleMute", null, correlationId);
+		sendCommand(COMMAND_TOGGLE_MUTE, null, correlationId);
 	}
 
 	public void setVolume(double volume) {
-		sendCommand("setVolume", volume);
+		sendCommand(COMMAND_SET_VOLUME, volume);
 	}
 
-	/**
-	 * Send a command and return a correlation ID for tracking the response
-	 * 
-	 * @param command the command to send
-	 * @return correlation ID that can be used with EventManager.listenForResponse()
-	 */
 	public String sendCommandWithResponse(String command) {
 		return sendCommandWithResponse(command, null);
 	}
 
-	/**
-	 * Send a command with value and return a correlation ID for tracking the
-	 * response
-	 * 
-	 * @param command the command to send
-	 * @param value   optional double value parameter
-	 * @return correlation ID that can be used with EventManager.listenForResponse()
-	 */
 	public String sendCommandWithResponse(String command, Double value) {
 		var correlationId = "media-" + requestIdCounter.incrementAndGet();
 		sendCommand(command, value, correlationId);
 		return correlationId;
 	}
 
-	public void shutdown() {
-		logger.debug(() -> "Shutting down MediaBridge");
-		running.set(false);
+	public synchronized void shutdown() {
+		if (!running.getAndSet(false)) {
+			return;
+		}
 
-		// First, try a graceful shutdown of the process
+		logger.debug(() -> "Shutting down MediaBridge");
+		closeQuietly(writer, "writer");
+
 		if (process != null && process.isAlive()) {
 			process.destroy();
 			try {
@@ -581,49 +549,45 @@ public class MediaBridgeClient {
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
 				logger.error(() -> "Interrupted while waiting for MediaBridge to exit", e);
+				process.destroyForcibly();
 			}
 		}
 
-		// Close the reader/writer streams
-		if (reader != null) {
-			try {
-				reader.close();
-			} catch (IOException e) {
-				logger.error(() -> "Error closing reader", e);
-			}
-		}
-		if (writer != null) {
-			try {
-				writer.close();
-			} catch (IOException e) {
-				logger.error(() -> "Error closing writer", e);
-			}
-		}
+		closeQuietly(reader, "reader");
+		joinThread(readerThread, 2_000);
+		joinThread(stderrThread, 500);
 
-		// Wait for reader thread to finish
-		if (readerThread != null && readerThread.isAlive()) {
-			try {
-				readerThread.join(2000);
-			} catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
-				logger.error(() -> "Interrupted while waiting for reader thread to finish", e);
-			}
-			if (readerThread.isAlive()) {
-				logger.warn(() -> "Reader thread did not terminate, interrupting");
-				readerThread.interrupt();
-			}
-		}
-
-		// Stop stderr reader
-		if (stderrThread != null && stderrThread.isAlive()) {
-			try {
-				stderrThread.join(500);
-			} catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
-			}
-		}
+		pendingCommandResults.clear();
+		pendingMediaEvents.clear();
+		pendingVolumeEvents.clear();
 
 		logger.debug(() -> "MediaBridge shutdown complete");
 	}
 
+	private void closeQuietly(AutoCloseable closeable, String name) {
+		if (closeable == null) {
+			return;
+		}
+		try {
+			closeable.close();
+		} catch (Exception e) {
+			logger.error(() -> "Error closing MediaBridge " + name, e);
+		}
+	}
+
+	private void joinThread(Thread thread, long timeoutMillis) {
+		if (thread == null || !thread.isAlive()) {
+			return;
+		}
+		try {
+			thread.join(timeoutMillis);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			logger.error(() -> "Interrupted while waiting for " + thread.getName(), e);
+		}
+		if (thread.isAlive()) {
+			logger.warn(() -> "Thread " + thread.getName() + " did not terminate; interrupting");
+			thread.interrupt();
+		}
+	}
 }
