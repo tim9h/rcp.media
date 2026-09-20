@@ -35,6 +35,8 @@ import javafx.application.Platform;
 @Singleton
 public class MediaBridgeClient {
 
+	private static final String SUCCESS = "success";
+
 	private static final String MEDIA_BRIDGE_EXE = "MediaBridge.exe";
 
 	private static final String MEDIA_BRIDGE_RESOURCE = "/native/windows/" + MEDIA_BRIDGE_EXE;
@@ -90,8 +92,6 @@ public class MediaBridgeClient {
 	private final ConcurrentLinkedQueue<String> pendingMediaEvents = new ConcurrentLinkedQueue<>();
 
 	private final ConcurrentLinkedQueue<String> pendingVolumeEvents = new ConcurrentLinkedQueue<>();
-
-	private volatile double lastVolume = 0.5;
 
 	private Process process;
 
@@ -154,7 +154,7 @@ public class MediaBridgeClient {
 						return null;
 					}
 					Files.copy(resource, executable, StandardCopyOption.REPLACE_EXISTING);
-					logger.info("Extracted " + MEDIA_BRIDGE_EXE + " to " + executable);
+					logger.info(() -> "Extracted " + MEDIA_BRIDGE_EXE + " to " + executable);
 				}
 			} else {
 				logger.info(() -> MEDIA_BRIDGE_EXE + " already exists at: " + executable);
@@ -189,7 +189,8 @@ public class MediaBridgeClient {
 		try (var stderr = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))) {
 			String line;
 			while ((line = stderr.readLine()) != null) {
-				logger.warn("MediaBridge stderr: " + line);
+				final var currentLine = line;
+				logger.warn(() -> "MediaBridge stderr: " + currentLine);
 			}
 		} catch (IOException e) {
 			if (running.get()) {
@@ -246,7 +247,7 @@ public class MediaBridgeClient {
 			updateCurrentTrack(title, artist, album, playing);
 
 			if (responseId != null) {
-				eventManager.postResponse(responseId, "success", title, artist, album, playing);
+				eventManager.postResponse(responseId, SUCCESS, title, artist, album, playing);
 			}
 		} catch (Exception e) {
 			logger.error(() -> "Error handling mediaChanged event", e);
@@ -264,7 +265,7 @@ public class MediaBridgeClient {
 			updatePlaybackState(playing);
 
 			if (responseId != null) {
-				eventManager.postResponse(responseId, "success", currentTrack.getTitleProperty().get(),
+				eventManager.postResponse(responseId, SUCCESS, currentTrack.getTitleProperty().get(),
 						currentTrack.getArtistProperty().get(), currentTrack.getAlbumProperty().get(), playing);
 			}
 		} catch (Exception e) {
@@ -276,12 +277,12 @@ public class MediaBridgeClient {
 	private void handleVolumeChanged(JsonObject json, String correlationId) {
 		var responseId = resolveEventCorrelationId(correlationId, pendingVolumeEvents, EVENT_VOLUME_CHANGED);
 		try {
-			lastVolume = json.get("volume").getAsDouble();
+			var lastVolume = json.get("volume").getAsDouble();
 			var muted = json.get("muted").getAsBoolean();
 
 			logger.debug(() -> "Volume changed: " + Math.round(lastVolume * 100) + "%, muted=" + muted);
 			if (responseId != null) {
-				eventManager.postResponse(responseId, "success", lastVolume, muted);
+				eventManager.postResponse(responseId, SUCCESS, lastVolume, muted);
 			}
 		} catch (Exception e) {
 			logger.error(() -> "Error handling volumeChanged event", e);
@@ -306,7 +307,7 @@ public class MediaBridgeClient {
 	private void handleCommandResult(JsonObject json, String correlationId) {
 		var responseId = resolveCommandResultCorrelationId(correlationId);
 		try {
-			var success = json.get("success").getAsBoolean();
+			var success = json.get(SUCCESS).getAsBoolean();
 			var command = json.get("command").getAsString();
 			logger.debug(() -> "Command '" + command + "' completed: " + success);
 
@@ -322,7 +323,7 @@ public class MediaBridgeClient {
 			}
 
 			if (COMMAND_STOP.equals(command)) {
-				eventManager.postResponse(responseId, "success", currentTrack.getTitleProperty().get(),
+				eventManager.postResponse(responseId, SUCCESS, currentTrack.getTitleProperty().get(),
 						currentTrack.getArtistProperty().get(), currentTrack.getAlbumProperty().get(), false);
 				return;
 			}
@@ -332,7 +333,7 @@ public class MediaBridgeClient {
 			 * corresponding state-change event completes the request.
 			 */
 			if (!isMediaCommand(command) && !isVolumeCommand(command)) {
-				eventManager.postResponse(responseId, "success", command);
+				eventManager.postResponse(responseId, SUCCESS, command);
 			}
 		} catch (Exception e) {
 			logger.error(() -> "Error handling commandResult", e);

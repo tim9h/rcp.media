@@ -310,16 +310,13 @@ public class MediaView implements Plugin {
 	}
 
 	/**
-	 * Extract correlation ID from event payload if present (first element).
-	 * When using postRequest, the first element is the correlation ID.
+	 * Extract correlation ID from event payload if present (first element). When
+	 * using postRequest, the first element is the correlation ID.
 	 */
 	private String extractCorrelationId(Object[] data) {
-		if (data != null && data.length > 0 && data[0] instanceof String) {
-			var firstElement = (String) data[0];
-			// Correlation IDs from webapi start with "webapi-"
-			if (firstElement.startsWith("webapi-")) {
-				return firstElement;
-			}
+		if (data != null && data.length > 0 && data[0] instanceof String firstElement
+				&& firstElement.startsWith("webapi-")) {
+			return firstElement;
 		}
 		return null;
 	}
