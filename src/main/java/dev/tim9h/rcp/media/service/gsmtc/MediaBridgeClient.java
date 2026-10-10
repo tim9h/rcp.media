@@ -25,7 +25,7 @@ import com.google.inject.Inject;
 import com.google.inject.Injector;
 import com.google.inject.Singleton;
 
-import dev.tim9h.rcp.event.CcEvent;
+import dev.tim9h.rcp.event.Event;
 import dev.tim9h.rcp.event.EventManager;
 import dev.tim9h.rcp.logging.InjectLogger;
 import dev.tim9h.rcp.media.service.bean.CurrentTrackProperties;
@@ -361,14 +361,14 @@ public class MediaBridgeClient {
 			currentTrack.getArtistProperty().set(artist);
 			currentTrack.getAlbumProperty().set(album);
 			currentTrack.getNowPlayingProperty().set(playing);
-			eventManager.post(new CcEvent("np", title, artist, album, playing));
+			eventManager.post(new Event("np", title, artist, album, playing));
 		});
 	}
 
 	private void updatePlaybackState(boolean playing) {
 		Platform.runLater(() -> {
 			currentTrack.getNowPlayingProperty().set(playing);
-			eventManager.post(new CcEvent("np", currentTrack.getTitleProperty().get(),
+			eventManager.post(new Event("np", currentTrack.getTitleProperty().get(),
 					currentTrack.getArtistProperty().get(), currentTrack.getAlbumProperty().get(), playing));
 		});
 	}

@@ -6,7 +6,7 @@ import com.google.inject.Inject;
 import com.google.inject.Singleton;
 
 import de.umass.lastfm.User;
-import dev.tim9h.rcp.event.CcEvent;
+import dev.tim9h.rcp.event.Event;
 import dev.tim9h.rcp.event.EventManager;
 import dev.tim9h.rcp.media.MediaView;
 import dev.tim9h.rcp.media.service.bean.Track;
@@ -47,7 +47,7 @@ public class LastFmService {
 		var iterator = User.getRecentTracks(getUsername(), getApiKey()).iterator();
 		if (iterator.hasNext()) {
 			var recent = iterator.next();
-			eventManager.post(new CcEvent("np", recent.getName(), recent.getArtist(), recent.getAlbum(), recent.isNowPlaying()));
+			eventManager.post(new Event("np", recent.getName(), recent.getArtist(), recent.getAlbum(), recent.isNowPlaying()));
 			return new Track(recent.getName(), recent.getArtist(), recent.getAlbum(), recent.isNowPlaying());
 		}
 		return null;

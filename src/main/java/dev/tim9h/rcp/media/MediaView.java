@@ -19,7 +19,7 @@ import org.apache.logging.log4j.Logger;
 import com.google.inject.Inject;
 
 import dev.tim9h.rcp.controls.IconButton;
-import dev.tim9h.rcp.event.CcEvent;
+import dev.tim9h.rcp.event.Event;
 import dev.tim9h.rcp.event.EventManager;
 import dev.tim9h.rcp.logging.InjectLogger;
 import dev.tim9h.rcp.media.service.bean.CurrentTrackProperties;
@@ -27,6 +27,8 @@ import dev.tim9h.rcp.media.service.gsmtc.MediaBridgeClient;
 import dev.tim9h.rcp.media.service.lastfm.LastFmService;
 import dev.tim9h.rcp.media.service.lastfm.LastFmWatcher;
 import dev.tim9h.rcp.settings.Settings;
+import dev.tim9h.rcp.spi.CommandBuilder;
+import dev.tim9h.rcp.spi.CommandNode;
 import dev.tim9h.rcp.spi.Gravity;
 import dev.tim9h.rcp.spi.Mode;
 import dev.tim9h.rcp.spi.Plugin;
@@ -151,7 +153,7 @@ public class MediaView implements Plugin {
 
 		// add last.fm links
 		lblTitle.setOnAction(_ -> {
-			eventManager.post(new CcEvent(CcEvent.EVENT_CLI_REQUEST_FOCUS));
+			eventManager.post(new Event(Event.EVENT_CLI_REQUEST_FOCUS));
 			if (currentTrack.getNowPlayingProperty().get()) {
 				openUrl("https://www.last.fm/music/%s/_/%s", lblArtist.getText(), lblTitle.getText());
 			} else {
@@ -159,11 +161,11 @@ public class MediaView implements Plugin {
 			}
 		});
 		lblArtist.setOnAction(_ -> {
-			eventManager.post(new CcEvent(CcEvent.EVENT_CLI_REQUEST_FOCUS));
+			eventManager.post(new Event(Event.EVENT_CLI_REQUEST_FOCUS));
 			openUrl("https://www.last.fm/music/%s/", lblArtist.getText());
 		});
 		lblAlbum.setOnAction(_ -> {
-			eventManager.post(new CcEvent(CcEvent.EVENT_CLI_REQUEST_FOCUS));
+			eventManager.post(new Event(Event.EVENT_CLI_REQUEST_FOCUS));
 			openUrl("https://www.last.fm/music/%s/%s/", lblArtist.getText(), lblAlbum.getText());
 		});
 
@@ -179,7 +181,7 @@ public class MediaView implements Plugin {
 		}
 
 		btnLastFm.setLabel('∞');
-		btnLastFm.setOnAction(_ -> eventManager.post(MODE_LASTFM, PROFILE));
+		btnLastFm.setOnAction(_ -> eventManager.postCommand(MODE_LASTFM, PROFILE));
 
 		var buttons = new HBox(btnLastFm, btnPrev, btnStop, btnPlay, btnNext);
 		buttons.setAlignment(Pos.CENTER_RIGHT);
@@ -344,11 +346,6 @@ public class MediaView implements Plugin {
 			}
 
 			@Override
-			public void onCommand(String command, String... args) {
-				handleLastfmCommands(command, args);
-			}
-
-			@Override
 			public void onEnable() {
 				lastFmWatcher.startPolling();
 				eventManager.echo("Last.fm status enabled");
@@ -361,35 +358,23 @@ public class MediaView implements Plugin {
 			}
 
 			@Override
-			public TreeNode<String> getCommandTree() {
-				var commands = Mode.super.getCommandTree();
-				commands.add("np", "username", "apikey", PROFILE);
-				return commands;
+			public Optional<CommandNode> getModeCommands() {
+				return new CommandBuilder().command(MODE_LASTFM).child("np", _ -> lastFmNowPlaying()).up()
+						.child("username", _ -> {
+							eventManager.echo("Last.fm username", settings.getString(SETTING_LASTFM_USERNAME));
+						}).argumentAction(username -> {
+							settings.persist(SETTING_LASTFM_USERNAME, username);
+							eventManager.echo("Updated last.fm Username");
+						}).up().child("apikey", _ -> {
+							eventManager.echo("Last.fm API key", settings.getString(SETTING_LASTFM_APIKEY));
+						}).argumentAction(apiKey -> {
+							settings.persist(SETTING_LASTFM_APIKEY, apiKey);
+							eventManager.echo("Updated last.fm API key");
+						}).up().child(PROFILE, _ -> {
+							openUrl("https://www.last.fm/user/%s", lastFmService.getUsername());
+						}).build();
 			}
 		}));
-	}
-
-	private void handleLastfmCommands(String command, String... args) {
-		var join = StringUtils.join(args);
-		if ("np".equals(command)) {
-			lastFmNowPlaying();
-		} else if ("username".equals(command)) {
-			if (StringUtils.isBlank(join)) {
-				eventManager.echo("Last.fm username", settings.getString(SETTING_LASTFM_USERNAME));
-			} else {
-				settings.persist(SETTING_LASTFM_USERNAME, join);
-				eventManager.echo("Updated last.fm Username");
-			}
-		} else if ("apikey".equals(command)) {
-			if (StringUtils.isBlank(join)) {
-				eventManager.echo("Last.fm API key", settings.getString(SETTING_LASTFM_APIKEY));
-			} else {
-				settings.persist(SETTING_LASTFM_APIKEY, join);
-				eventManager.echo("Updated last.fm API key");
-			}
-		} else if (PROFILE.equals(command)) {
-			openUrl("https://www.last.fm/user/%s", lastFmService.getUsername());
-		}
 	}
 
 	private void lastFmNowPlaying() {
@@ -398,12 +383,10 @@ public class MediaView implements Plugin {
 			if (track != null) {
 				if (track.isPlaying()) {
 					eventManager.echo(track.artist(), track.title());
-					eventManager
-							.post(new CcEvent("np", track.title(), track.artist(), track.album(), track.isPlaying()));
+					eventManager.post(new Event("np", track.title(), track.artist(), track.album(), track.isPlaying()));
 				} else {
 					eventManager.echo("Not scrobbling");
-					eventManager
-							.post(new CcEvent("np", StringUtils.EMPTY, StringUtils.EMPTY, StringUtils.EMPTY, false));
+					eventManager.post(new Event("np", StringUtils.EMPTY, StringUtils.EMPTY, StringUtils.EMPTY, false));
 				}
 			}
 		});
@@ -411,6 +394,7 @@ public class MediaView implements Plugin {
 
 	@Override
 	public Optional<TreeNode<String>> getModelessCommands() {
+		// TODO: migrate to CommandBuilder
 		return Optional.of(new StringNode().add("next", "previous", "play", "pause", "stop"));
 	}
 
