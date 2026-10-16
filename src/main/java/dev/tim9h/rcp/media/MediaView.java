@@ -33,8 +33,6 @@ import dev.tim9h.rcp.spi.Gravity;
 import dev.tim9h.rcp.spi.Mode;
 import dev.tim9h.rcp.spi.Plugin;
 import dev.tim9h.rcp.spi.Position;
-import dev.tim9h.rcp.spi.StringNode;
-import dev.tim9h.rcp.spi.TreeNode;
 import javafx.animation.FadeTransition;
 import javafx.beans.binding.Bindings;
 import javafx.geometry.Pos;
@@ -181,7 +179,7 @@ public class MediaView implements Plugin {
 		}
 
 		btnLastFm.setLabel('∞');
-		btnLastFm.setOnAction(_ -> eventManager.postCommand(MODE_LASTFM, PROFILE));
+		btnLastFm.setOnAction(_ -> eventManager.post(MODE_LASTFM, PROFILE));
 
 		var buttons = new HBox(btnLastFm, btnPrev, btnStop, btnPlay, btnNext);
 		buttons.setAlignment(Pos.CENTER_RIGHT);
@@ -261,61 +259,55 @@ public class MediaView implements Plugin {
 	}
 
 	@Override
-	public void initBus(EventManager em) {
-		Plugin.super.initBus(eventManager);
-
-		em.listen("next", data -> {
+	public Optional<CommandNode> getCommands() {
+		return new CommandBuilder().command("next", data -> {
 			var correlationId = extractCorrelationId(data);
 			mediaBridge.nextSongWithResponse(correlationId);
-			em.echo("Playing next song");
-		});
-		em.listen("previous", data -> {
+			eventManager.echo("Playing next song");
+		}).command("previous", data -> {
 			var correlationId = extractCorrelationId(data);
 			mediaBridge.prevSongWithResponse(correlationId);
-			em.echo("Playing previous song");
-		});
-		em.listen("play", data -> {
+			eventManager.echo("Playing previous song");
+		}).command("play", data -> {
 			var correlationId = extractCorrelationId(data);
 			mediaBridge.playPauseWithResponse(correlationId);
-			em.echo("Play/Pause music");
-		});
-		em.listen("pause", data -> {
+			eventManager.echo("Play/Pause music");
+		}).command("pause", data -> {
 			var correlationId = extractCorrelationId(data);
 			mediaBridge.playPauseWithResponse(correlationId);
-			em.echo("Play/Pause music");
-		});
-		em.listen("stop", data -> {
+			eventManager.echo("Play/Pause music");
+		}).command("stop", data -> {
 			var correlationId = extractCorrelationId(data);
 			mediaBridge.stopWithResponse(correlationId);
-			em.echo("Stop playing music");
-		});
-		em.listen("np", data -> {
-			if (StringUtils.join(data) == null) {
+			eventManager.echo("Stop playing music");
+		}).command("np", data -> {
+			if (data == null) {
 				lastFmWatcher.updatePropertiesAsync();
 			}
-		});
-		em.listen("volumeup", data -> {
+		}).command("volumeup", data -> {
 			var correlationId = extractCorrelationId(data);
 			mediaBridge.volumeUpWithResponse(correlationId);
-			em.echo("Volume up");
-		});
-		em.listen("volumedown", data -> {
+			eventManager.echo("Volume up");
+		}).command("volumedown", data -> {
 			var correlationId = extractCorrelationId(data);
 			mediaBridge.volumeDownWithResponse(correlationId);
-			em.echo("Volume down");
-		});
-		em.listen("mute", data -> {
+			eventManager.echo("Volume down");
+		}).command("mute", data -> {
 			var correlationId = extractCorrelationId(data);
 			mediaBridge.toggleMuteWithResponse(correlationId);
-			em.echo("Mute");
-		});
+			eventManager.echo("Mute");
+		}).build();
 	}
 
 	/**
 	 * Extract correlation ID from event payload if present (first element). When
 	 * using postRequest, the first element is the correlation ID.
 	 */
-	private String extractCorrelationId(Object[] data) {
+	private String extractCorrelationId(String sData) {
+		if (sData == null || sData.isBlank()) {
+			return null;
+		}
+		var data = sData.split(" ");
 		if (data != null && data.length > 0 && data[0] instanceof String firstElement
 				&& firstElement.startsWith("webapi-")) {
 			return firstElement;
@@ -390,12 +382,6 @@ public class MediaView implements Plugin {
 				}
 			}
 		});
-	}
-
-	@Override
-	public Optional<TreeNode<String>> getModelessCommands() {
-		// TODO: migrate to CommandBuilder
-		return Optional.of(new StringNode().add("next", "previous", "play", "pause", "stop"));
 	}
 
 	@Override
