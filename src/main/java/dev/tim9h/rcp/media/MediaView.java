@@ -18,6 +18,7 @@ import org.apache.logging.log4j.Logger;
 
 import com.google.inject.Inject;
 
+import dev.tim9h.rcp.controls.AnimatedLabel;
 import dev.tim9h.rcp.controls.IconButton;
 import dev.tim9h.rcp.event.Event;
 import dev.tim9h.rcp.event.EventManager;
@@ -33,16 +34,15 @@ import dev.tim9h.rcp.spi.Gravity;
 import dev.tim9h.rcp.spi.Mode;
 import dev.tim9h.rcp.spi.Plugin;
 import dev.tim9h.rcp.spi.Position;
-import javafx.animation.FadeTransition;
 import javafx.beans.binding.Bindings;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
-import javafx.scene.control.Hyperlink;
+import javafx.scene.input.MouseButton;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
-import javafx.util.Duration;
+import javafx.scene.text.TextAlignment;
 
 public class MediaView implements Plugin {
 
@@ -60,8 +60,6 @@ public class MediaView implements Plugin {
 
 	public static final String SETTING_MODES = "core.modes";
 
-	private static final String SETTINGS_ANIMATIONS_ENABLED = "core.ui.animations";
-
 	@InjectLogger
 	private Logger logger;
 
@@ -71,19 +69,20 @@ public class MediaView implements Plugin {
 	@Inject
 	private Settings settings;
 
-	private Duration animationDuration;
-
 	@Inject
 	private LastFmService lastFmService;
 
 	@Inject
 	private LastFmWatcher lastFmWatcher;
 
-	private Hyperlink lblTitle;
+	@Inject
+	private AnimatedLabel lblTitle;
 
-	private Hyperlink lblArtist;
+	@Inject
+	private AnimatedLabel lblArtist;
 
-	private Hyperlink lblAlbum;
+	@Inject
+	private AnimatedLabel lblAlbum;
 
 	@Inject
 	private CurrentTrackProperties currentTrack;
@@ -118,10 +117,12 @@ public class MediaView implements Plugin {
 
 	@Override
 	public Optional<Node> getNode() throws IOException {
-		lblTitle = new Hyperlink();
-		lblArtist = new Hyperlink();
-		lblAlbum = new Hyperlink();
 		lblTitle.getStyleClass().add("accent-label");
+		for (var label : List.of(lblTitle, lblArtist, lblAlbum)) {
+			label.setTextAlignment(TextAlignment.LEFT);
+			label.setClipEnabled(false);
+			label.getStyleClass().add("link");
+		}
 
 		btnPrev.setLabel('⏪');
 		btnPrev.setOnAction(_ -> {
@@ -150,7 +151,7 @@ public class MediaView implements Plugin {
 		createCurrentTrackBindings();
 
 		// add last.fm links
-		lblTitle.setOnAction(_ -> {
+		onPrimaryClick(lblTitle, () -> {
 			eventManager.post(new Event(Event.EVENT_CLI_REQUEST_FOCUS));
 			if (currentTrack.getNowPlayingProperty().get()) {
 				openUrl("https://www.last.fm/music/%s/_/%s", lblArtist.getText(), lblTitle.getText());
@@ -158,25 +159,17 @@ public class MediaView implements Plugin {
 				openUrl("https://www.last.fm/user/%s", lastFmService.getUsername());
 			}
 		});
-		lblArtist.setOnAction(_ -> {
+		onPrimaryClick(lblArtist, () -> {
 			eventManager.post(new Event(Event.EVENT_CLI_REQUEST_FOCUS));
 			openUrl("https://www.last.fm/music/%s/", lblArtist.getText());
 		});
-		lblAlbum.setOnAction(_ -> {
+		onPrimaryClick(lblAlbum, () -> {
 			eventManager.post(new Event(Event.EVENT_CLI_REQUEST_FOCUS));
 			openUrl("https://www.last.fm/music/%s/%s/", lblArtist.getText(), lblAlbum.getText());
 		});
 
 		var songInfo = new VBox(lblTitle, lblArtist, lblAlbum);
-
-		var fade = new FadeTransition(getAnimationDuration(), songInfo);
-		fade.setFromValue(0.0);
-		fade.setToValue(1.0);
-		fade.setAutoReverse(true);
-
-		if (settings.getBoolean(SETTINGS_ANIMATIONS_ENABLED).booleanValue()) {
-			lblTitle.textProperty().addListener((_, _, _) -> fade.play());
-		}
+		songInfo.setMinWidth(0);
 
 		btnLastFm.setLabel('∞');
 		btnLastFm.setOnAction(_ -> eventManager.post(MODE_LASTFM, PROFILE));
@@ -196,25 +189,41 @@ public class MediaView implements Plugin {
 		return Optional.of(hbox);
 	}
 
-	private void createCurrentTrackBindings() {
-		lblTitle.textProperty().bind(Bindings.createStringBinding(
-				() -> currentTrack.getNowPlayingProperty().get() ? currentTrack.getTitleProperty().get() : NOT_PLAYING,
-				currentTrack.getTitleProperty(), currentTrack.getNowPlayingProperty()));
-		lblAlbum.textProperty()
-				.bind(Bindings.createStringBinding(
-						() -> currentTrack.getNowPlayingProperty().get() ? currentTrack.getAlbumProperty().get()
-								: StringUtils.EMPTY,
-						currentTrack.getAlbumProperty(), currentTrack.getNowPlayingProperty()));
-		lblArtist.textProperty()
-				.bind(Bindings.createStringBinding(
-						() -> currentTrack.getNowPlayingProperty().get() ? currentTrack.getArtistProperty().get()
-								: StringUtils.EMPTY,
-						currentTrack.getArtistProperty(), currentTrack.getNowPlayingProperty()));
+	private static void onPrimaryClick(Node node, Runnable action) {
+		node.setOnMouseClicked(e -> {
+			if (e.getButton() == MouseButton.PRIMARY) {
+				action.run();
+			}
+		});
+	}
 
-		lblAlbum.disableProperty().bind(currentTrack.getNowPlayingProperty().not());
-		lblArtist.disableProperty().bind(currentTrack.getNowPlayingProperty().not());
+	private static String orEmpty(String value) {
+		return value == null ? StringUtils.EMPTY : value;
+	}
+
+	private void createCurrentTrackBindings() {
+		Runnable updateLabels = () -> {
+			var playing = currentTrack.getNowPlayingProperty().get();
+			showText(lblTitle, playing ? orEmpty(currentTrack.getTitleProperty().get()) : NOT_PLAYING);
+			showText(lblAlbum, playing ? orEmpty(currentTrack.getAlbumProperty().get()) : StringUtils.EMPTY);
+			showText(lblArtist, playing ? orEmpty(currentTrack.getArtistProperty().get()) : StringUtils.EMPTY);
+		};
+		currentTrack.getTitleProperty().addListener((_, _, _) -> updateLabels.run());
+		currentTrack.getAlbumProperty().addListener((_, _, _) -> updateLabels.run());
+		currentTrack.getArtistProperty().addListener((_, _, _) -> updateLabels.run());
+		currentTrack.getNowPlayingProperty().addListener((_, _, _) -> updateLabels.run());
+		updateLabels.run();
 
 		btnPlay.bindLabel(Bindings.when(currentTrack.getNowPlayingProperty()).then("⏸").otherwise("⏵"));
+	}
+
+	/**
+	 * Shows the text and disables the label (no hover effect, no click handling)
+	 * while there is nothing to link to.
+	 */
+	private static void showText(AnimatedLabel label, String text) {
+		label.showText(text);
+		label.setDisable(text.isBlank());
 	}
 
 	private void openUrl(String url, String... params) {
@@ -317,15 +326,7 @@ public class MediaView implements Plugin {
 
 	@Override
 	public void onSettingsChanged() {
-		animationDuration = null;
 		lastFmService.reloadSettings();
-	}
-
-	private Duration getAnimationDuration() {
-		if (animationDuration == null) {
-			animationDuration = Duration.millis(settings.getDouble("ui.components.label.fade.duration").doubleValue());
-		}
-		return animationDuration;
 	}
 
 	@Override
