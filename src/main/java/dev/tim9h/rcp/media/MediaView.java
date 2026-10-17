@@ -250,6 +250,7 @@ public class MediaView implements Plugin {
 
 	@Override
 	public void onShown() {
+		setLabelsAnimated(true);
 		if (settings.getStringSet(SETTING_MODES).contains(MODE_LASTFM)) {
 			lastFmWatcher.startPolling();
 		}
@@ -257,8 +258,16 @@ public class MediaView implements Plugin {
 
 	@Override
 	public void onHidden() {
+		// keep updating the track, but without animations while collapsed
+		setLabelsAnimated(false);
 		if (settings.getStringSet(SETTING_MODES).contains(MODE_LASTFM)) {
 			lastFmWatcher.stopPolling();
+		}
+	}
+
+	private void setLabelsAnimated(boolean animated) {
+		for (var label : List.of(lblTitle, lblArtist, lblAlbum)) {
+			label.setAnimated(animated);
 		}
 	}
 
