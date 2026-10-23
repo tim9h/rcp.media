@@ -139,7 +139,7 @@ public class MediaView implements Plugin {
 		btnPlay.setLabel('⏯');
 		btnPlay.setOnAction(_ -> {
 			mediaBridge.playPause();
-			eventManager.echo("Play/Pause");
+			eventManager.echo(currentTrack.getNowPlayingProperty().get() ? "Pause" : "Play");
 		});
 
 		btnNext.setLabel('⏩');
@@ -289,11 +289,11 @@ public class MediaView implements Plugin {
 		}).command("play", data -> {
 			var correlationId = extractCorrelationId(data);
 			mediaBridge.playPauseWithResponse(correlationId);
-			eventManager.echo("Play/Pause music");
+			eventManager.echo(currentTrack.getNowPlayingProperty().get() ? "Pausing music" : "Playing music");
 		}).command("pause", data -> {
 			var correlationId = extractCorrelationId(data);
 			mediaBridge.playPauseWithResponse(correlationId);
-			eventManager.echo("Play/Pause music");
+			eventManager.echo(currentTrack.getNowPlayingProperty().get() ? "Pausing music" : "Playing music");
 		}).command("stop", data -> {
 			var correlationId = extractCorrelationId(data);
 			mediaBridge.stopWithResponse(correlationId);
