@@ -40,3 +40,16 @@ jobs:
       - name: Build, test and build Maven package
         if: github.event_name == 'push'
         run: mvn -B -s .mvn/settings.xml package
+
+      - name: Create GitHub release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(mvn -B -q -s .mvn/settings.xml help:evaluate -Dexpression=project.version -DforceStdout)
+          ARTIFACT="target/rcp.media-${VERSION}.jar"
+          gh release delete "v${VERSION}" --cleanup-tag --yes || true
+          gh release create "v${VERSION}" "${ARTIFACT}" \
+            --target "${GITHUB_SHA}" \
+            --title "v${VERSION}" \
+            --generate-notes
