@@ -28,18 +28,31 @@
 		</repository>
 	</repositories>
 
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>dev.tim9h</groupId>
+				<artifactId>rcp.api</artifactId>
+				<version>${project.parent.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>dev.tim9h</groupId>
+				<artifactId>rcp.controls</artifactId>
+				<version>${project.parent.version}</version>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+
 	<dependencies>
 
 		<dependency>
 			<groupId>dev.tim9h</groupId>
 			<artifactId>rcp.api</artifactId>
-			<version>${project.parent.version}</version><!--$NO-MVN-MAN-VER$-->
 		</dependency>
 
 		<dependency>
 			<groupId>dev.tim9h</groupId>
 			<artifactId>rcp.controls</artifactId>
-			<version>${project.parent.version}</version><!--$NO-MVN-MAN-VER$-->
 		</dependency>
 
 		<dependency>
