@@ -16,6 +16,17 @@
 		<plugin.outputDirectory>${project.build.directory}</plugin.outputDirectory>
 	</properties>
 
+	<repositories>
+		<repository>
+			<id>gh-read-packages</id>
+			<name>GitHub Packages</name>
+			<url>https://maven.pkg.github.com/tim9h/rcp</url>
+			<snapshots>
+				<enabled>true</enabled>
+			</snapshots>
+		</repository>
+	</repositories>
+
 	<dependencies>
 
 		<dependency>
