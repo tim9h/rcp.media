@@ -10,7 +10,7 @@
 			<username>${env.PACKAGES_READ_USERNAME}</username>
 			<password>${env.PACKAGES_READ_TOKEN}</password>
 			<repositoryOrigins>
-				<origin>https://maven.pkg.github.com</origin>
+				<repositoryOrigin>https://maven.pkg.github.com</repositoryOrigin>
 			</repositoryOrigins>
 		</server>
 
@@ -19,7 +19,7 @@
 			<username>${env.GITHUB_ACTOR}</username>
 			<password>${env.GITHUB_TOKEN}</password>
 			<repositoryOrigins>
-				<origin>https://maven.pkg.github.com</origin>
+				<repositoryOrigin>https://maven.pkg.github.com</repositoryOrigin>
 			</repositoryOrigins>
 		</server>
 
