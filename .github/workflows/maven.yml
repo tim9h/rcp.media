@@ -41,6 +41,6 @@ jobs:
         if: github.event_name == 'pull_request'
         run: mvn -B verify
 
-      - name: Build, test and publish Maven package
+      - name: Build, test and build Maven package
         if: github.event_name == 'push'
-        run: mvn -B deploy
+        run: mvn -B package
