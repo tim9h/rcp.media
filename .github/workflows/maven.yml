@@ -33,14 +33,10 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-          mvn-server-credentials: |
-            gh-read-packages:PACKAGES_READ_USERNAME:PACKAGES_READ_TOKEN
-            github:GITHUB_ACTOR:GITHUB_TOKEN
-
       - name: Build and test
         if: github.event_name == 'pull_request'
-        run: mvn -B verify
+        run: mvn -B -s .mvn/settings.xml verify
 
       - name: Build, test and build Maven package
         if: github.event_name == 'push'
-        run: mvn -B package
+        run: mvn -B -s .mvn/settings.xml package
