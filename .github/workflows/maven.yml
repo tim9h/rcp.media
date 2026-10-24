@@ -1,0 +1,46 @@
+name: Java CI with Maven
+
+on:
+  push:
+    branches:
+      - master
+      - develop
+  pull_request:
+    branches:
+      - master
+      - develop
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    env:
+      PACKAGES_READ_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN }}
+      PACKAGES_READ_USERNAME: ${{ secrets.PACKAGES_READ_USERNAME }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up JDK 27
+        uses: actions/setup-java@v6
+        with:
+          java-version: '27'
+          distribution: 'temurin'
+          cache: maven
+
+          mvn-server-credentials: |
+            gh-read-packages:PACKAGES_READ_USERNAME:PACKAGES_READ_TOKEN
+            github:GITHUB_ACTOR:GITHUB_TOKEN
+
+      - name: Build and test
+        if: github.event_name == 'pull_request'
+        run: mvn -B verify
+
+      - name: Build, test and publish Maven package
+        if: github.event_name == 'push'
+        run: mvn -B deploy
