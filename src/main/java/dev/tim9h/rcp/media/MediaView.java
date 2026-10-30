@@ -105,6 +105,8 @@ public class MediaView implements Plugin {
 	@Inject
 	private IconButton btnLastFm;
 
+	private int songMaxChars = -1;
+
 	@Override
 	public String getName() {
 		return "Music Player";
@@ -154,18 +156,20 @@ public class MediaView implements Plugin {
 		onPrimaryClick(lblTitle, () -> {
 			eventManager.post(new Event(Event.EVENT_CLI_REQUEST_FOCUS));
 			if (currentTrack.getNowPlayingProperty().get()) {
-				openUrl("https://www.last.fm/music/%s/_/%s", lblArtist.getText(), lblTitle.getText());
+				openUrl("https://www.last.fm/music/%s/_/%s", currentTrack.getArtistProperty().get(),
+						currentTrack.getTitleProperty().get());
 			} else {
 				openUrl("https://www.last.fm/user/%s", lastFmService.getUsername());
 			}
 		});
 		onPrimaryClick(lblArtist, () -> {
 			eventManager.post(new Event(Event.EVENT_CLI_REQUEST_FOCUS));
-			openUrl("https://www.last.fm/music/%s/", lblArtist.getText());
+			openUrl("https://www.last.fm/music/%s/", currentTrack.getArtistProperty().get());
 		});
 		onPrimaryClick(lblAlbum, () -> {
 			eventManager.post(new Event(Event.EVENT_CLI_REQUEST_FOCUS));
-			openUrl("https://www.last.fm/music/%s/%s/", lblArtist.getText(), lblAlbum.getText());
+			openUrl("https://www.last.fm/music/%s/%s/", currentTrack.getArtistProperty().get(),
+					currentTrack.getAlbumProperty().get());
 		});
 
 		var songInfo = new VBox(lblTitle, lblArtist, lblAlbum);
@@ -204,9 +208,11 @@ public class MediaView implements Plugin {
 	private void createCurrentTrackBindings() {
 		Runnable updateLabels = () -> {
 			var playing = currentTrack.getNowPlayingProperty().get();
-			showText(lblTitle, playing ? orEmpty(currentTrack.getTitleProperty().get()) : NOT_PLAYING);
-			showText(lblAlbum, playing ? orEmpty(currentTrack.getAlbumProperty().get()) : StringUtils.EMPTY);
-			showText(lblArtist, playing ? orEmpty(currentTrack.getArtistProperty().get()) : StringUtils.EMPTY);
+			showText(lblTitle, truncateText(playing ? orEmpty(currentTrack.getTitleProperty().get()) : NOT_PLAYING));
+			showText(lblAlbum,
+					truncateText(playing ? orEmpty(currentTrack.getAlbumProperty().get()) : StringUtils.EMPTY));
+			showText(lblArtist,
+					truncateText(playing ? orEmpty(currentTrack.getArtistProperty().get()) : StringUtils.EMPTY));
 		};
 		currentTrack.getTitleProperty().addListener((_, _, _) -> updateLabels.run());
 		currentTrack.getAlbumProperty().addListener((_, _, _) -> updateLabels.run());
@@ -215,6 +221,21 @@ public class MediaView implements Plugin {
 		updateLabels.run();
 
 		btnPlay.bindLabel(Bindings.when(currentTrack.getNowPlayingProperty()).then("⏸").otherwise("⏵"));
+	}
+
+	/**
+	 * Truncates text with ellipsis (...) if it exceeds the limit calculated from
+	 * the label width. Uses 1 character per 10 pixels of application width (600px
+	 * => 60 chars, 400px => 40 chars, etc.)
+	 */
+	private String truncateText(String text) {
+		if (text == null || text.isBlank()) {
+			return text;
+		}
+		if (text.length() <= getSongMaxChars()) {
+			return text;
+		}
+		return text.substring(0, songMaxChars) + "...";
 	}
 
 	/**
@@ -336,6 +357,15 @@ public class MediaView implements Plugin {
 	@Override
 	public void onSettingsChanged() {
 		lastFmService.reloadSettings();
+		songMaxChars = -1; // reset to recalculate based on new width
+	}
+
+	private int getSongMaxChars() {
+		if (songMaxChars < 0) {
+			var width = settings.getInt("core.ui.stage.width");
+			songMaxChars = Math.max(10, width / 10); // Minimum 10 chars
+		}
+		return songMaxChars;
 	}
 
 	@Override
