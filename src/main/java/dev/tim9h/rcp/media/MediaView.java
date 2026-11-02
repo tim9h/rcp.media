@@ -125,6 +125,8 @@ public class MediaView implements Plugin {
 			label.setClipEnabled(false);
 			label.getStyleClass().add("link");
 		}
+		lblArtist.getStyleClass().add("detail-label");
+		lblAlbum.getStyleClass().add("detail-label");
 
 		btnPrev.setLabel('⏪');
 		btnPrev.setOnAction(_ -> {
