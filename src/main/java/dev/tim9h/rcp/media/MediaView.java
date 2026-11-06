@@ -186,6 +186,7 @@ public class MediaView implements Plugin {
 
 		setIcon(btnLastFm, loadSvgIcon("/image/lastfm.svg", 16.0 / 512, btnLastFm), '⚠');
 		btnLastFm.setOnAction(_ -> eventManager.post(MODE_LASTFM, PROFILE));
+		updateLastFmButtonVisibility();
 
 		var buttons = new HBox(btnLastFm, btnPrev, btnStop, btnPlay, btnNext);
 		buttons.setAlignment(Pos.CENTER_RIGHT);
@@ -421,7 +422,14 @@ public class MediaView implements Plugin {
 	@Override
 	public void onSettingsChanged() {
 		lastFmService.reloadSettings();
+		updateLastFmButtonVisibility();
 		songMaxChars = -1; // reset to recalculate based on new width
+	}
+
+	private void updateLastFmButtonVisibility() {
+		var visible = StringUtils.isNotBlank(settings.getString(SETTING_LASTFM_USERNAME));
+		btnLastFm.setVisible(visible);
+		btnLastFm.setManaged(visible);
 	}
 
 	private int getSongMaxChars() {
