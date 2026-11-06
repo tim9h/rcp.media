@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.regex.Pattern;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.Logger;
@@ -34,7 +35,6 @@ import dev.tim9h.rcp.spi.Gravity;
 import dev.tim9h.rcp.spi.Mode;
 import dev.tim9h.rcp.spi.Plugin;
 import dev.tim9h.rcp.spi.Position;
-import javafx.beans.binding.Bindings;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.input.MouseButton;
@@ -42,6 +42,7 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
+import javafx.scene.shape.SVGPath;
 import javafx.scene.text.TextAlignment;
 
 public class MediaView implements Plugin {
@@ -57,6 +58,10 @@ public class MediaView implements Plugin {
 	public static final String NOT_PLAYING = "Not playing";
 
 	private static final String MODE_LASTFM = "lastfm";
+
+	private static final Pattern SVG_PATH = Pattern.compile("<path[^>]* d=\"([^\"]+)\"");
+
+	private static final double BUTTON_ICON_SIZE = 16;
 
 	public static final String SETTING_MODES = "core.modes";
 
@@ -105,6 +110,10 @@ public class MediaView implements Plugin {
 	@Inject
 	private IconButton btnLastFm;
 
+	private SVGPath playIcon;
+
+	private SVGPath pauseIcon;
+
 	private int songMaxChars = -1;
 
 	@Override
@@ -128,25 +137,23 @@ public class MediaView implements Plugin {
 		lblArtist.getStyleClass().add("detail-label");
 		lblAlbum.getStyleClass().add("detail-label");
 
-		btnPrev.setLabel('⏪');
+		setupMediaIcons();
+
 		btnPrev.setOnAction(_ -> {
 			mediaBridge.prevSong();
 			eventManager.echo("Previous");
 		});
 
-		btnStop.setLabel('⏹');
 		btnStop.setOnAction(_ -> {
 			mediaBridge.stop();
 			eventManager.echo("Stop");
 		});
 
-		btnPlay.setLabel('⏯');
 		btnPlay.setOnAction(_ -> {
 			mediaBridge.playPause();
 			eventManager.echo(currentTrack.getNowPlayingProperty().get() ? "Pause" : "Play");
 		});
 
-		btnNext.setLabel('⏩');
 		btnNext.setOnAction(_ -> {
 			mediaBridge.nextSong();
 			eventManager.echo("Next");
@@ -177,7 +184,7 @@ public class MediaView implements Plugin {
 		var songInfo = new VBox(lblTitle, lblArtist, lblAlbum);
 		songInfo.setMinWidth(0);
 
-		btnLastFm.setLabel('∞');
+		setIcon(btnLastFm, loadSvgIcon("/image/lastfm.svg", 16.0 / 512, btnLastFm), '⚠');
 		btnLastFm.setOnAction(_ -> eventManager.post(MODE_LASTFM, PROFILE));
 
 		var buttons = new HBox(btnLastFm, btnPrev, btnStop, btnPlay, btnNext);
@@ -219,10 +226,12 @@ public class MediaView implements Plugin {
 		currentTrack.getTitleProperty().addListener((_, _, _) -> updateLabels.run());
 		currentTrack.getAlbumProperty().addListener((_, _, _) -> updateLabels.run());
 		currentTrack.getArtistProperty().addListener((_, _, _) -> updateLabels.run());
-		currentTrack.getNowPlayingProperty().addListener((_, _, _) -> updateLabels.run());
+		currentTrack.getNowPlayingProperty().addListener((_, _, _) -> {
+			updateLabels.run();
+			updatePlayPauseIcon();
+		});
 		updateLabels.run();
-
-		btnPlay.bindLabel(Bindings.when(currentTrack.getNowPlayingProperty()).then("⏸").otherwise("⏵"));
+		updatePlayPauseIcon();
 	}
 
 	/**
@@ -245,7 +254,8 @@ public class MediaView implements Plugin {
 	 * while there is nothing to link to.
 	 */
 	private static void showText(AnimatedLabel label, String text) {
-		label.showText(text);
+		// Preserve the label's line height even when the value is empty.
+		label.showText(text.isBlank() ? "\u00A0" : text);
 		label.setDisable(text.isBlank());
 	}
 
@@ -264,6 +274,58 @@ public class MediaView implements Plugin {
 			return encoded.substring(9); // remove BOM
 		}
 		return encoded;
+	}
+
+	private void setupMediaIcons() {
+		setIcon(btnPrev, loadSvgIcon("/image/previous.svg", BUTTON_ICON_SIZE / 24, btnPrev), '⏮');
+		setIcon(btnStop, loadSvgIcon("/image/stop.svg", BUTTON_ICON_SIZE / 24, btnStop), '⏹');
+		setIcon(btnNext, loadSvgIcon("/image/next.svg", BUTTON_ICON_SIZE / 24, btnNext), '⏭');
+		playIcon = loadSvgIcon("/image/play.svg", BUTTON_ICON_SIZE / 24, btnPlay);
+		pauseIcon = loadSvgIcon("/image/pause.svg", BUTTON_ICON_SIZE / 24, btnPlay);
+		updatePlayPauseIcon();
+	}
+
+	private void updatePlayPauseIcon() {
+		var playing = currentTrack.getNowPlayingProperty().get();
+		setIcon(btnPlay, playing ? pauseIcon : playIcon, playing ? '⏸' : '⏵');
+	}
+
+	private SVGPath loadSvgIcon(String resourcePath, double scale, IconButton button) {
+		try {
+			var icon = loadSvgPath(resourcePath, scale);
+			button.bindGraphicFill(icon);
+			return icon;
+		} catch (IOException | RuntimeException e) {
+			logger.error(() -> "Unable to load SVG icon: " + resourcePath, e);
+			return null;
+		}
+	}
+
+	private static void setIcon(IconButton button, SVGPath icon, char fallback) {
+		if (icon == null) {
+			button.setGraphic(null);
+			button.setLabel(fallback);
+		} else {
+			button.setGraphic(icon);
+		}
+	}
+
+	private SVGPath loadSvgPath(String resourcePath, double scale) throws IOException {
+		try (var input = getClass().getResourceAsStream(resourcePath)) {
+			if (input == null) {
+				throw new IOException("Missing SVG resource: " + resourcePath);
+			}
+			var svg = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+			var matcher = SVG_PATH.matcher(svg);
+			if (!matcher.find()) {
+				throw new IOException("Invalid SVG resource: " + resourcePath);
+			}
+			var path = new SVGPath();
+			path.setContent(matcher.group(1));
+			path.setScaleX(scale);
+			path.setScaleY(scale);
+			return path;
+		}
 	}
 
 	@Override
