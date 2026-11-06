@@ -43,7 +43,10 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.scene.shape.SVGPath;
+import javafx.scene.text.Font;
+import javafx.scene.text.Text;
 import javafx.scene.text.TextAlignment;
+import javafx.scene.text.TextFlow;
 
 public class MediaView implements Plugin {
 
@@ -114,7 +117,7 @@ public class MediaView implements Plugin {
 
 	private SVGPath pauseIcon;
 
-	private int songMaxChars = -1;
+	private final Map<AnimatedLabel, String> labelTexts = new HashMap<>();
 
 	@Override
 	public String getName() {
@@ -132,6 +135,9 @@ public class MediaView implements Plugin {
 		for (var label : List.of(lblTitle, lblArtist, lblAlbum)) {
 			label.setTextAlignment(TextAlignment.LEFT);
 			label.setClipEnabled(false);
+			label.setMinWidth(0);
+			label.setMaxWidth(Double.MAX_VALUE);
+			label.widthProperty().addListener((_, _, _) -> updateLabelText(label));
 			label.getStyleClass().add("link");
 		}
 		lblArtist.getStyleClass().add("detail-label");
@@ -183,6 +189,7 @@ public class MediaView implements Plugin {
 
 		var songInfo = new VBox(lblTitle, lblArtist, lblAlbum);
 		songInfo.setMinWidth(0);
+		songInfo.setFillWidth(true);
 
 		setIcon(btnLastFm, loadSvgIcon("/image/lastfm.svg", 16.0 / 512, btnLastFm), '⚠');
 		btnLastFm.setOnAction(_ -> eventManager.post(MODE_LASTFM, PROFILE));
@@ -191,6 +198,8 @@ public class MediaView implements Plugin {
 		var buttons = new HBox(btnLastFm, btnPrev, btnStop, btnPlay, btnNext);
 		buttons.setAlignment(Pos.CENTER_RIGHT);
 		buttons.setPrefHeight(Region.USE_PREF_SIZE);
+		buttons.setMinWidth(Region.USE_PREF_SIZE);
+		buttons.setMaxWidth(Region.USE_PREF_SIZE);
 
 		var hbox = new HBox();
 		HBox.setHgrow(songInfo, Priority.ALWAYS);
@@ -218,11 +227,9 @@ public class MediaView implements Plugin {
 	private void createCurrentTrackBindings() {
 		Runnable updateLabels = () -> {
 			var playing = currentTrack.getNowPlayingProperty().get();
-			showText(lblTitle, truncateText(playing ? orEmpty(currentTrack.getTitleProperty().get()) : NOT_PLAYING));
-			showText(lblAlbum,
-					truncateText(playing ? orEmpty(currentTrack.getAlbumProperty().get()) : StringUtils.EMPTY));
-			showText(lblArtist,
-					truncateText(playing ? orEmpty(currentTrack.getArtistProperty().get()) : StringUtils.EMPTY));
+			setLabelText(lblTitle, playing ? orEmpty(currentTrack.getTitleProperty().get()) : NOT_PLAYING);
+			setLabelText(lblAlbum, playing ? orEmpty(currentTrack.getAlbumProperty().get()) : StringUtils.EMPTY);
+			setLabelText(lblArtist, playing ? orEmpty(currentTrack.getArtistProperty().get()) : StringUtils.EMPTY);
 		};
 		currentTrack.getTitleProperty().addListener((_, _, _) -> updateLabels.run());
 		currentTrack.getAlbumProperty().addListener((_, _, _) -> updateLabels.run());
@@ -235,19 +242,52 @@ public class MediaView implements Plugin {
 		updatePlayPauseIcon();
 	}
 
-	/**
-	 * Truncates text with ellipsis (...) if it exceeds the limit calculated from
-	 * the label width. Uses 1 character per 10 pixels of application width (600px
-	 * => 60 chars, 400px => 40 chars, etc.)
-	 */
-	private String truncateText(String text) {
-		if (text == null || text.isBlank()) {
-			return text;
+	private void setLabelText(AnimatedLabel label, String text) {
+		labelTexts.put(label, text);
+		updateLabelText(label);
+	}
+
+	private void updateLabelText(AnimatedLabel label) {
+		var text = labelTexts.get(label);
+		if (text == null) {
+			return;
 		}
-		if (text.length() <= getSongMaxChars()) {
-			return text;
+
+		var width = label.getWidth() - label.getInsets().getLeft() - label.getInsets().getRight();
+		if (width <= 0 || text.isEmpty()) {
+			showText(label, text);
+			return;
 		}
-		return text.substring(0, songMaxChars) + "...";
+
+		var renderedText = label.getChildrenUnmodifiable().stream().filter(TextFlow.class::isInstance)
+				.map(TextFlow.class::cast).flatMap(flow -> flow.getChildrenUnmodifiable().stream())
+				.filter(Text.class::isInstance).map(Text.class::cast).findFirst().orElse(null);
+		var measure = new Text();
+		measure.setFont(renderedText == null ? Font.getDefault() : renderedText.getFont());
+		measure.setText(text);
+		if (measure.getLayoutBounds().getWidth() <= width) {
+			showText(label, text);
+			return;
+		}
+
+		var codePoints = text.codePoints().toArray();
+		var low = 0;
+		var high = codePoints.length;
+		measure.setText("...");
+		if (measure.getLayoutBounds().getWidth() > width) {
+			showText(label, StringUtils.EMPTY);
+			return;
+		}
+		while (low < high) {
+			var middle = (low + high + 1) / 2;
+			measure.setText(new String(codePoints, 0, middle) + "...");
+			if (measure.getLayoutBounds().getWidth() <= width) {
+				low = middle;
+			} else {
+				high = middle - 1;
+			}
+		}
+		showText(label, new String(codePoints, 0, low) + "...");
 	}
 
 	/**
@@ -423,21 +463,12 @@ public class MediaView implements Plugin {
 	public void onSettingsChanged() {
 		lastFmService.reloadSettings();
 		updateLastFmButtonVisibility();
-		songMaxChars = -1; // reset to recalculate based on new width
 	}
 
 	private void updateLastFmButtonVisibility() {
 		var visible = StringUtils.isNotBlank(settings.getString(SETTING_LASTFM_USERNAME));
 		btnLastFm.setVisible(visible);
 		btnLastFm.setManaged(visible);
-	}
-
-	private int getSongMaxChars() {
-		if (songMaxChars < 0) {
-			var width = settings.getInt("core.ui.stage.width");
-			songMaxChars = Math.max(10, width / 10); // Minimum 10 chars
-		}
-		return songMaxChars;
 	}
 
 	@Override
