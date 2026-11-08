@@ -12,7 +12,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-import java.util.regex.Pattern;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.Logger;
@@ -35,6 +34,7 @@ import dev.tim9h.rcp.spi.Gravity;
 import dev.tim9h.rcp.spi.Mode;
 import dev.tim9h.rcp.spi.Plugin;
 import dev.tim9h.rcp.spi.Position;
+import dev.tim9h.rcp.util.SvgIconUtil;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.input.MouseButton;
@@ -61,8 +61,6 @@ public class MediaView implements Plugin {
 	public static final String NOT_PLAYING = "Not playing";
 
 	private static final String MODE_LASTFM = "lastfm";
-
-	private static final Pattern SVG_PATH = Pattern.compile("<path[^>]* d=\"([^\"]+)\"");
 
 	private static final double BUTTON_ICON_SIZE = 16;
 
@@ -352,21 +350,7 @@ public class MediaView implements Plugin {
 	}
 
 	private SVGPath loadSvgPath(String resourcePath, double scale) throws IOException {
-		try (var input = getClass().getResourceAsStream(resourcePath)) {
-			if (input == null) {
-				throw new IOException("Missing SVG resource: " + resourcePath);
-			}
-			var svg = new String(input.readAllBytes(), StandardCharsets.UTF_8);
-			var matcher = SVG_PATH.matcher(svg);
-			if (!matcher.find()) {
-				throw new IOException("Invalid SVG resource: " + resourcePath);
-			}
-			var path = new SVGPath();
-			path.setContent(matcher.group(1));
-			path.setScaleX(scale);
-			path.setScaleY(scale);
-			return path;
-		}
+		return SvgIconUtil.loadPath(getClass().getResourceAsStream(resourcePath), resourcePath, scale);
 	}
 
 	@Override
