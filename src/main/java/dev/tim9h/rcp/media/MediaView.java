@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 import org.apache.commons.lang3.StringUtils;
@@ -138,6 +139,9 @@ public class MediaView implements Plugin {
 			label.widthProperty().addListener((_, _, _) -> updateLabelText(label));
 			label.getStyleClass().add("link");
 		}
+		// Preserve the link's border and padding metrics when its .link class is removed.
+		lblTitle.setStyle("-fx-border-width: 1px; -fx-border-color: transparent; "
+				+ "-fx-border-radius: 5px; -fx-padding: 1px 4px;");
 		lblArtist.getStyleClass().add("detail-label");
 		lblAlbum.getStyleClass().add("detail-label");
 
@@ -167,13 +171,12 @@ public class MediaView implements Plugin {
 
 		// add last.fm links
 		onPrimaryClick(lblTitle, () -> {
-			eventManager.post(new Event(Event.EVENT_CLI_REQUEST_FOCUS));
-			if (currentTrack.getNowPlayingProperty().get()) {
-				openUrl("https://www.last.fm/music/%s/_/%s", currentTrack.getArtistProperty().get(),
-						currentTrack.getTitleProperty().get());
-			} else {
-				openUrl("https://www.last.fm/user/%s", lastFmService.getUsername());
+			if (!currentTrack.getNowPlayingProperty().get()) {
+				return;
 			}
+			eventManager.post(new Event(Event.EVENT_CLI_REQUEST_FOCUS));
+			openUrl("https://www.last.fm/music/%s/_/%s", currentTrack.getArtistProperty().get(),
+					currentTrack.getTitleProperty().get());
 		});
 		onPrimaryClick(lblArtist, () -> {
 			eventManager.post(new Event(Event.EVENT_CLI_REQUEST_FOCUS));
@@ -234,10 +237,18 @@ public class MediaView implements Plugin {
 		currentTrack.getArtistProperty().addListener((_, _, _) -> updateLabels.run());
 		currentTrack.getNowPlayingProperty().addListener((_, _, _) -> {
 			updateLabels.run();
+			setTitleLinkEnabled(currentTrack.getNowPlayingProperty().get());
 			updatePlayPauseIcon();
 		});
 		updateLabels.run();
+		setTitleLinkEnabled(currentTrack.getNowPlayingProperty().get());
 		updatePlayPauseIcon();
+	}
+
+	private void setTitleLinkEnabled(boolean enabled) {
+		var styleClasses = lblTitle.getStyleClass();
+		styleClasses.removeIf(styleClass -> Set.of("link", "secondary", "accent-label").contains(styleClass));
+		styleClasses.addAll(enabled ? List.of("link", "accent-label") : List.of("secondary"));
 	}
 
 	private void setLabelText(AnimatedLabel label, String text) {
