@@ -13,6 +13,7 @@ import com.google.inject.Singleton;
 import dev.tim9h.rcp.logging.InjectLogger;
 import dev.tim9h.rcp.media.MediaView;
 import dev.tim9h.rcp.media.service.bean.CurrentTrackProperties;
+import dev.tim9h.rcp.service.ModeService;
 import dev.tim9h.rcp.settings.Settings;
 import javafx.application.Platform;
 
@@ -27,6 +28,9 @@ public class LastFmWatcher {
 
 	@Inject
 	private Settings settings;
+
+	@Inject
+	private ModeService modeService;
 
 	@InjectLogger
 	private Logger logger;
@@ -65,7 +69,7 @@ public class LastFmWatcher {
 	}
 
 	public void updatePropertiesAsync() {
-		if (settings.getStringSet(MediaView.SETTING_MODES).contains("lastfm")) {
+		if (modeService.isModeActive(MediaView.MODE_LASTFM)) {
 			CompletableFuture.runAsync(() -> {
 				try {
 					Thread.sleep(1000);
