@@ -35,11 +35,11 @@ jobs:
 
       - name: Build and test
         if: github.event_name == 'pull_request'
-        run: mvn -B -s .mvn/settings.xml verify
+        run: mvn -U -B -s .mvn/settings.xml verify
 
       - name: Build, test and build Maven package
         if: github.event_name == 'push'
-        run: mvn -B -s .mvn/settings.xml package
+        run: mvn -U -B -s .mvn/settings.xml package
 
       - name: Create GitHub release
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'

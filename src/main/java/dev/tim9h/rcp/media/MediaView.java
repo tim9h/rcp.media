@@ -28,6 +28,7 @@ import dev.tim9h.rcp.media.service.bean.CurrentTrackProperties;
 import dev.tim9h.rcp.media.service.gsmtc.MediaBridgeClient;
 import dev.tim9h.rcp.media.service.lastfm.LastFmService;
 import dev.tim9h.rcp.media.service.lastfm.LastFmWatcher;
+import dev.tim9h.rcp.service.ModeService;
 import dev.tim9h.rcp.settings.Settings;
 import dev.tim9h.rcp.spi.CommandBuilder;
 import dev.tim9h.rcp.spi.CommandNode;
@@ -61,11 +62,9 @@ public class MediaView implements Plugin {
 
 	public static final String NOT_PLAYING = "Not playing";
 
-	private static final String MODE_LASTFM = "lastfm";
+	public static final String MODE_LASTFM = "lastfm";
 
 	private static final double BUTTON_ICON_SIZE = 16;
-
-	public static final String SETTING_MODES = "core.modes";
 
 	@InjectLogger
 	private Logger logger;
@@ -75,6 +74,9 @@ public class MediaView implements Plugin {
 
 	@Inject
 	private Settings settings;
+
+	@Inject
+	private ModeService modeService;
 
 	@Inject
 	private LastFmService lastFmService;
@@ -139,7 +141,7 @@ public class MediaView implements Plugin {
 			label.widthProperty().addListener((_, _, _) -> updateLabelText(label));
 			label.getStyleClass().add("link");
 		}
-		// Preserve the link's border and padding metrics when its .link class is removed.
+		// Preserve the link's border and padding metrics
 		lblTitle.setStyle("-fx-border-width: 1px; -fx-border-color: transparent; "
 				+ "-fx-border-radius: 5px; -fx-padding: 1px 4px;");
 		lblArtist.getStyleClass().add("detail-label");
@@ -372,7 +374,7 @@ public class MediaView implements Plugin {
 	@Override
 	public void onShown() {
 		setLabelsAnimated(true);
-		if (settings.getStringSet(SETTING_MODES).contains(MODE_LASTFM)) {
+		if (modeService.isModeActive(MODE_LASTFM)) {
 			lastFmWatcher.startPolling();
 		}
 	}
@@ -381,7 +383,7 @@ public class MediaView implements Plugin {
 	public void onHidden() {
 		// keep updating the track, but without animations while collapsed
 		setLabelsAnimated(false);
-		if (settings.getStringSet(SETTING_MODES).contains(MODE_LASTFM)) {
+		if (modeService.isModeActive(MODE_LASTFM)) {
 			lastFmWatcher.stopPolling();
 		}
 	}
