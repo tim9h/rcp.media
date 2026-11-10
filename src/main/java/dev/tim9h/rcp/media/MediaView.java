@@ -28,7 +28,6 @@ import dev.tim9h.rcp.media.service.bean.CurrentTrackProperties;
 import dev.tim9h.rcp.media.service.gsmtc.MediaBridgeClient;
 import dev.tim9h.rcp.media.service.lastfm.LastFmService;
 import dev.tim9h.rcp.media.service.lastfm.LastFmWatcher;
-import dev.tim9h.rcp.service.ModeService;
 import dev.tim9h.rcp.settings.Settings;
 import dev.tim9h.rcp.spi.CommandBuilder;
 import dev.tim9h.rcp.spi.CommandNode;
@@ -74,9 +73,6 @@ public class MediaView implements Plugin {
 
 	@Inject
 	private Settings settings;
-
-	@Inject
-	private ModeService modeService;
 
 	@Inject
 	private LastFmService lastFmService;
@@ -374,18 +370,14 @@ public class MediaView implements Plugin {
 	@Override
 	public void onShown() {
 		setLabelsAnimated(true);
-		if (modeService.isModeActive(MODE_LASTFM)) {
-			lastFmWatcher.startPolling();
-		}
+		lastFmWatcher.setViewShown(true);
 	}
 
 	@Override
 	public void onHidden() {
 		// keep updating the track, but without animations while collapsed
 		setLabelsAnimated(false);
-		if (modeService.isModeActive(MODE_LASTFM)) {
-			lastFmWatcher.stopPolling();
-		}
+		lastFmWatcher.setViewShown(false);
 	}
 
 	private void setLabelsAnimated(boolean animated) {
@@ -514,6 +506,7 @@ public class MediaView implements Plugin {
 		CompletableFuture.supplyAsync(() -> lastFmService.getCurrentTrack()).thenAccept(track -> {
 			if (track != null) {
 				if (track.isPlaying()) {
+					lastFmWatcher.updateCurrentTrack(track);
 					eventManager.echo(track.artist(), track.title());
 					eventManager.post(new Event("np", track.title(), track.artist(), track.album(), track.isPlaying()));
 				} else {

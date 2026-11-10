@@ -16,6 +16,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.Logger;
 
 import com.google.gson.Gson;
@@ -29,6 +30,7 @@ import dev.tim9h.rcp.event.Event;
 import dev.tim9h.rcp.event.EventManager;
 import dev.tim9h.rcp.logging.InjectLogger;
 import dev.tim9h.rcp.media.service.bean.CurrentTrackProperties;
+import dev.tim9h.rcp.media.service.bean.Track;
 import dev.tim9h.rcp.media.service.lastfm.LastFmWatcher;
 import javafx.application.Platform;
 
@@ -357,17 +359,23 @@ public class MediaBridgeClient {
 
 	private void updateCurrentTrack(String title, String artist, String album, boolean playing) {
 		Platform.runLater(() -> {
+			var existingAlbum = currentTrack.getAlbumProperty().get();
+			var updatedAlbum = StringUtils.isBlank(album) && Track.matches(title, artist,
+					currentTrack.getTitleProperty().get(), currentTrack.getArtistProperty().get()) ? existingAlbum
+							: album;
 			currentTrack.getTitleProperty().set(title);
 			currentTrack.getArtistProperty().set(artist);
-			currentTrack.getAlbumProperty().set(album);
+			currentTrack.getAlbumProperty().set(updatedAlbum);
 			currentTrack.getNowPlayingProperty().set(playing);
-			eventManager.post(new Event("np", title, artist, album, playing));
+			watcher.onCurrentTrackChanged();
+			eventManager.post(new Event("np", title, artist, updatedAlbum, playing));
 		});
 	}
 
 	private void updatePlaybackState(boolean playing) {
 		Platform.runLater(() -> {
 			currentTrack.getNowPlayingProperty().set(playing);
+			watcher.onCurrentTrackChanged();
 			eventManager.post(new Event("np", currentTrack.getTitleProperty().get(),
 					currentTrack.getArtistProperty().get(), currentTrack.getAlbumProperty().get(), playing));
 		});

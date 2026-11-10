@@ -1,6 +1,7 @@
 package dev.tim9h.rcp.media.service.lastfm;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.Logger;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
@@ -8,6 +9,7 @@ import com.google.inject.Singleton;
 import de.umass.lastfm.User;
 import dev.tim9h.rcp.event.Event;
 import dev.tim9h.rcp.event.EventManager;
+import dev.tim9h.rcp.logging.InjectLogger;
 import dev.tim9h.rcp.media.MediaView;
 import dev.tim9h.rcp.media.service.bean.Track;
 import dev.tim9h.rcp.settings.Settings;
@@ -24,6 +26,9 @@ public class LastFmService {
 	private String apiKey;
 
 	private String username;
+
+	@InjectLogger
+	private Logger logger;
 
 	private String getApiKey() {
 		if (StringUtils.isBlank(apiKey)) {
@@ -47,7 +52,10 @@ public class LastFmService {
 		var iterator = User.getRecentTracks(getUsername(), getApiKey()).iterator();
 		if (iterator.hasNext()) {
 			var recent = iterator.next();
-			eventManager.post(new Event("np", recent.getName(), recent.getArtist(), recent.getAlbum(), recent.isNowPlaying()));
+			logger.debug(() -> "Last.fm: " + recent.getName() + " - " + recent.getArtist() + " - " + recent.getAlbum()
+					+ " - " + recent.isNowPlaying());
+			eventManager.post(
+					new Event("np", recent.getName(), recent.getArtist(), recent.getAlbum(), recent.isNowPlaying()));
 			return new Track(recent.getName(), recent.getArtist(), recent.getAlbum(), recent.isNowPlaying());
 		}
 		return null;
