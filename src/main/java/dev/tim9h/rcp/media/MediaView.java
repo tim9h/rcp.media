@@ -224,18 +224,13 @@ public class MediaView implements Plugin {
 	}
 
 	private void createCurrentTrackBindings() {
-		Runnable updateLabels = () -> {
-			var playing = currentTrack.getNowPlayingProperty().get();
-			setLabelText(lblTitle, playing ? orEmpty(currentTrack.getTitleProperty().get()) : NOT_PLAYING);
-			setLabelText(lblAlbum, playing ? orEmpty(currentTrack.getAlbumProperty().get()) : StringUtils.EMPTY);
-			setLabelText(lblArtist, playing ? orEmpty(currentTrack.getArtistProperty().get()) : StringUtils.EMPTY);
-		};
+		Runnable updateLabels = () -> updateLabels(null);
 		currentTrack.getTitleProperty().addListener((_, _, _) -> updateLabels.run());
 		currentTrack.getAlbumProperty().addListener((_, _, _) -> updateLabels.run());
 		currentTrack.getArtistProperty().addListener((_, _, _) -> updateLabels.run());
 		currentTrack.getNowPlayingProperty().addListener((_, _, _) -> {
-			updateLabels.run();
-			setTitleLinkEnabled(currentTrack.getNowPlayingProperty().get());
+			var playing = currentTrack.getNowPlayingProperty().get();
+			updateLabels(() -> setTitleLinkEnabled(playing));
 			updatePlayPauseIcon();
 		});
 		updateLabels.run();
@@ -243,18 +238,46 @@ public class MediaView implements Plugin {
 		updatePlayPauseIcon();
 	}
 
+	private void updateLabels(Runnable onTitleShown) {
+		var playing = currentTrack.getNowPlayingProperty().get();
+		setLabelText(lblTitle, playing ? orEmpty(currentTrack.getTitleProperty().get()) : NOT_PLAYING, onTitleShown);
+		setLabelText(lblAlbum, playing ? orEmpty(currentTrack.getAlbumProperty().get()) : StringUtils.EMPTY);
+		setLabelText(lblArtist, playing ? orEmpty(currentTrack.getArtistProperty().get()) : StringUtils.EMPTY);
+	}
+
 	private void setTitleLinkEnabled(boolean enabled) {
 		var styleClasses = lblTitle.getStyleClass();
-		styleClasses.removeIf(styleClass -> Set.of("link", "secondary", "accent-label").contains(styleClass));
+		var titleStateClasses = Set.of("link", "secondary", "accent-label");
+		styleClasses.removeIf(titleStateClasses::contains);
 		styleClasses.addAll(enabled ? List.of("link", "accent-label") : List.of("secondary"));
+
+		for (var node : lblTitle.getChildrenUnmodifiable()) {
+			if (node instanceof TextFlow flow) {
+				for (var child : flow.getChildrenUnmodifiable()) {
+					if (child instanceof Text text) {
+						var textClasses = text.getStyleClass();
+						textClasses.removeIf(titleStateClasses::contains);
+						textClasses.addAll(styleClasses.stream().filter(titleStateClasses::contains).toList());
+					}
+				}
+			}
+		}
 	}
 
 	private void setLabelText(AnimatedLabel label, String text) {
+		setLabelText(label, text, null);
+	}
+
+	private void setLabelText(AnimatedLabel label, String text, Runnable onFinished) {
 		labelTexts.put(label, text);
-		updateLabelText(label);
+		updateLabelText(label, onFinished);
 	}
 
 	private void updateLabelText(AnimatedLabel label) {
+		updateLabelText(label, null);
+	}
+
+	private void updateLabelText(AnimatedLabel label, Runnable onFinished) {
 		var text = labelTexts.get(label);
 		if (text == null) {
 			return;
@@ -262,7 +285,7 @@ public class MediaView implements Plugin {
 
 		var width = label.getWidth() - label.getInsets().getLeft() - label.getInsets().getRight();
 		if (width <= 0 || text.isEmpty()) {
-			showText(label, text);
+			showText(label, text, onFinished);
 			return;
 		}
 
@@ -273,7 +296,7 @@ public class MediaView implements Plugin {
 		measure.setFont(renderedText == null ? Font.getDefault() : renderedText.getFont());
 		measure.setText(text);
 		if (measure.getLayoutBounds().getWidth() <= width) {
-			showText(label, text);
+			showText(label, text, onFinished);
 			return;
 		}
 
@@ -282,7 +305,7 @@ public class MediaView implements Plugin {
 		var high = codePoints.length;
 		measure.setText("...");
 		if (measure.getLayoutBounds().getWidth() > width) {
-			showText(label, StringUtils.EMPTY);
+			showText(label, StringUtils.EMPTY, onFinished);
 			return;
 		}
 		while (low < high) {
@@ -294,16 +317,16 @@ public class MediaView implements Plugin {
 				high = middle - 1;
 			}
 		}
-		showText(label, new String(codePoints, 0, low) + "...");
+		showText(label, new String(codePoints, 0, low) + "...", onFinished);
 	}
 
 	/**
 	 * Shows the text and disables the label (no hover effect, no click handling)
 	 * while there is nothing to link to.
 	 */
-	private static void showText(AnimatedLabel label, String text) {
+	private static void showText(AnimatedLabel label, String text, Runnable onFinished) {
 		// Preserve the label's line height even when the value is empty.
-		label.showText(text.isBlank() ? "\u00A0" : text);
+		label.showText(text.isBlank() ? "\u00A0" : text, onFinished);
 		label.setDisable(text.isBlank());
 	}
 
