@@ -11,6 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -44,6 +45,8 @@ public class MediaBridgeClient {
 	private static final String MEDIA_BRIDGE_RESOURCE = "/native/windows/" + MEDIA_BRIDGE_EXE;
 
 	private static final String EVENT_MEDIA_CHANGED = "mediaChanged";
+
+	private static final List<String> LINKABLE_PLAYERS = List.of("AIMP", "Spotify");
 
 	private static final String EVENT_PLAYBACK_CHANGED = "playbackChanged";
 
@@ -246,7 +249,8 @@ public class MediaBridgeClient {
 			var playing = "Playing".equalsIgnoreCase(event.state());
 
 			logger.debug(() -> "Media changed: " + title + " - " + artist);
-			updateCurrentTrack(title, artist, album, playing);
+			var linkable = LINKABLE_PLAYERS.stream().anyMatch(p -> p.equalsIgnoreCase(event.player()));
+			updateCurrentTrack(title, artist, album, playing, linkable);
 
 			if (responseId != null) {
 				eventManager.postResponse(responseId, SUCCESS, title, artist, album, playing);
@@ -313,6 +317,11 @@ public class MediaBridgeClient {
 			var command = json.get("command").getAsString();
 			logger.debug(() -> "Command '" + command + "' completed: " + success);
 
+			if (success && COMMAND_STOP.equals(command)) {
+				watcher.onStopped();
+				updatePlaybackState(false);
+			}
+
 			if (responseId == null) {
 				logger.debug(() -> "Ignoring untracked command result for " + command);
 				return;
@@ -357,8 +366,10 @@ public class MediaBridgeClient {
 		return queuedId;
 	}
 
-	private void updateCurrentTrack(String title, String artist, String album, boolean playing) {
+	private void updateCurrentTrack(String title, String artist, String album, boolean playing, boolean linkable) {
+		watcher.onPlaybackResumed();
 		Platform.runLater(() -> {
+			currentTrack.getLinkableProperty().set(linkable);
 			var existingAlbum = currentTrack.getAlbumProperty().get();
 			var updatedAlbum = StringUtils.isBlank(album) && Track.matches(title, artist,
 					currentTrack.getTitleProperty().get(), currentTrack.getArtistProperty().get()) ? existingAlbum
@@ -373,6 +384,9 @@ public class MediaBridgeClient {
 	}
 
 	private void updatePlaybackState(boolean playing) {
+		if (playing) {
+			watcher.onPlaybackResumed();
+		}
 		Platform.runLater(() -> {
 			currentTrack.getNowPlayingProperty().set(playing);
 			watcher.onCurrentTrackChanged();

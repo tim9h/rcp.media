@@ -18,6 +18,18 @@ public class CurrentTrackProperties {
 
 	private BooleanProperty nowPlayingProperty;
 
+	private BooleanProperty linkableProperty;
+
+	/**
+	 * Whether the current track is known to be music that can be found on last.fm
+	 */
+	public BooleanProperty getLinkableProperty() {
+		if (linkableProperty == null) {
+			linkableProperty = new SimpleBooleanProperty();
+		}
+		return linkableProperty;
+	}
+
 	public StringProperty getTitleProperty() {
 		if (titleProperty == null) {
 			titleProperty = new SimpleStringProperty();
