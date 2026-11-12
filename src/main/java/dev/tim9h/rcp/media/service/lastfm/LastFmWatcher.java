@@ -46,6 +46,22 @@ public class LastFmWatcher {
 
 	private volatile boolean pollingRequired;
 
+	private volatile boolean stopped;
+
+	/**
+	 * Stops last.fm from updating or completing the current track until the media
+	 * bridge reports new playback.
+	 */
+	public void onStopped() {
+		stopped = true;
+		latestTrack = null;
+		refreshPollingState();
+	}
+
+	public void onPlaybackResumed() {
+		stopped = false;
+	}
+
 	public void startPolling() {
 		modeActive = true;
 		refreshPollingState();
@@ -72,13 +88,17 @@ public class LastFmWatcher {
 	}
 
 	public void updateCurrentTrack(Track track) {
-		if (track == null || !track.isPlaying()) {
+		if (stopped || track == null || !track.isPlaying()) {
 			return;
 		}
 
 		latestTrack = track;
 		Platform.runLater(() -> {
+			if (stopped) {
+				return;
+			}
 			if (!currentTrack.getNowPlayingProperty().get()) {
+				currentTrack.getLinkableProperty().set(true);
 				currentTrack.getTitleProperty().set(track.title());
 				currentTrack.getArtistProperty().set(track.artist());
 				currentTrack.getAlbumProperty().set(track.album());
@@ -94,6 +114,9 @@ public class LastFmWatcher {
 
 	public void onCurrentTrackChanged() {
 		runOnFxThread(() -> {
+			if (stopped) {
+				return;
+			}
 			var track = latestTrack;
 			if (track != null) {
 				completeAlbumIfCurrentTrackMatches(track);

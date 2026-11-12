@@ -169,7 +169,7 @@ public class MediaView implements Plugin {
 
 		// add last.fm links
 		onPrimaryClick(lblTitle, () -> {
-			if (!currentTrack.getNowPlayingProperty().get()) {
+			if (!isLinkEnabled()) {
 				return;
 			}
 			eventManager.post(new Event(Event.EVENT_CLI_REQUEST_FOCUS));
@@ -177,10 +177,16 @@ public class MediaView implements Plugin {
 					currentTrack.getTitleProperty().get());
 		});
 		onPrimaryClick(lblArtist, () -> {
+			if (!isLinkEnabled()) {
+				return;
+			}
 			eventManager.post(new Event(Event.EVENT_CLI_REQUEST_FOCUS));
 			openUrl("https://www.last.fm/music/%s/", currentTrack.getArtistProperty().get());
 		});
 		onPrimaryClick(lblAlbum, () -> {
+			if (!isLinkEnabled()) {
+				return;
+			}
 			eventManager.post(new Event(Event.EVENT_CLI_REQUEST_FOCUS));
 			openUrl("https://www.last.fm/music/%s/%s/", currentTrack.getArtistProperty().get(),
 					currentTrack.getAlbumProperty().get());
@@ -223,19 +229,32 @@ public class MediaView implements Plugin {
 		return value == null ? StringUtils.EMPTY : value;
 	}
 
+	private boolean isLinkEnabled() {
+		return currentTrack.getNowPlayingProperty().get() && currentTrack.getLinkableProperty().get();
+	}
+
 	private void createCurrentTrackBindings() {
 		Runnable updateLabels = () -> updateLabels(null);
 		currentTrack.getTitleProperty().addListener((_, _, _) -> updateLabels.run());
 		currentTrack.getAlbumProperty().addListener((_, _, _) -> updateLabels.run());
 		currentTrack.getArtistProperty().addListener((_, _, _) -> updateLabels.run());
+		currentTrack.getLinkableProperty().addListener((_, _, _) -> updateLinkState());
 		currentTrack.getNowPlayingProperty().addListener((_, _, _) -> {
-			var playing = currentTrack.getNowPlayingProperty().get();
-			updateLabels(() -> setTitleLinkEnabled(playing));
+			updateLabels(this::updateLinkState);
 			updatePlayPauseIcon();
 		});
 		updateLabels.run();
-		setTitleLinkEnabled(currentTrack.getNowPlayingProperty().get());
+		updateLinkState();
 		updatePlayPauseIcon();
+	}
+
+	private void updateLinkState() {
+		setTitleLinkEnabled(currentTrack.getNowPlayingProperty().get());
+		// Mouse-transparent nodes get no :hover/:pressed state, while keeping all other
+		// styles
+		for (var label : List.of(lblTitle, lblArtist, lblAlbum)) {
+			label.setMouseTransparent(!isLinkEnabled());
+		}
 	}
 
 	private void updateLabels(Runnable onTitleShown) {
@@ -245,11 +264,11 @@ public class MediaView implements Plugin {
 		setLabelText(lblArtist, playing ? orEmpty(currentTrack.getArtistProperty().get()) : StringUtils.EMPTY);
 	}
 
-	private void setTitleLinkEnabled(boolean enabled) {
+	private void setTitleLinkEnabled(boolean playing) {
 		var styleClasses = lblTitle.getStyleClass();
 		var titleStateClasses = Set.of("link", "secondary", "accent-label");
 		styleClasses.removeIf(titleStateClasses::contains);
-		styleClasses.addAll(enabled ? List.of("link", "accent-label") : List.of("secondary"));
+		styleClasses.addAll(playing ? List.of("link", "accent-label") : List.of("secondary"));
 
 		for (var node : lblTitle.getChildrenUnmodifiable()) {
 			if (node instanceof TextFlow flow) {
@@ -324,7 +343,7 @@ public class MediaView implements Plugin {
 	 * Shows the text and disables the label (no hover effect, no click handling)
 	 * while there is nothing to link to.
 	 */
-	private static void showText(AnimatedLabel label, String text, Runnable onFinished) {
+	private void showText(AnimatedLabel label, String text, Runnable onFinished) {
 		// Preserve the label's line height even when the value is empty.
 		label.showText(text.isBlank() ? "\u00A0" : text, onFinished);
 		label.setDisable(text.isBlank());
