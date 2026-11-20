@@ -8,6 +8,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -36,6 +37,7 @@ import dev.tim9h.rcp.spi.Mode;
 import dev.tim9h.rcp.spi.Plugin;
 import dev.tim9h.rcp.spi.Position;
 import dev.tim9h.rcp.util.SvgIconUtil;
+import javafx.application.Platform;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.input.MouseButton;
@@ -43,6 +45,7 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
+import javafx.scene.shape.Rectangle;
 import javafx.scene.shape.SVGPath;
 import javafx.scene.text.Font;
 import javafx.scene.text.Text;
@@ -114,7 +117,18 @@ public class MediaView implements Plugin {
 
 	private SVGPath pauseIcon;
 
+	private static final String ELLIPSIS = "...";
+
+	// Safety margin against rounding differences between measuring and rendering
+	private static final double WIDTH_TOLERANCE = 2;
+
 	private final Map<AnimatedLabel, String> labelTexts = new HashMap<>();
+
+	private final Map<AnimatedLabel, Double> usedWidths = new HashMap<>();
+
+	private final Set<AnimatedLabel> pendingVerification = new HashSet<>();
+
+	private VBox songInfo;
 
 	@Override
 	public String getName() {
@@ -192,9 +206,25 @@ public class MediaView implements Plugin {
 					currentTrack.getAlbumProperty().get());
 		});
 
-		var songInfo = new VBox(lblTitle, lblArtist, lblAlbum);
+		songInfo = new VBox(lblTitle, lblArtist, lblAlbum);
 		songInfo.setMinWidth(0);
 		songInfo.setFillWidth(true);
+		// Safety net: never paint beyond the available space, e.g. while a typing
+		// animation shows intermediate text
+		var songInfoClip = new Rectangle();
+		songInfoClip.widthProperty().bind(songInfo.widthProperty());
+		songInfoClip.heightProperty().bind(songInfo.heightProperty());
+		songInfo.setClip(songInfoClip);
+		songInfo.widthProperty().addListener((_, _, _) -> {
+			for (var label : List.of(lblTitle, lblArtist, lblAlbum)) {
+				updateLabelText(label);
+			}
+		});
+		songInfo.sceneProperty().addListener((_, _, scene) -> {
+			if (scene != null) {
+				Platform.runLater(() -> List.of(lblTitle, lblArtist, lblAlbum).forEach(this::updateLabelText));
+			}
+		});
 
 		setIcon(btnLastFm, loadSvgIcon("/image/lastfm.svg", 16.0 / 512, btnLastFm), '⚠');
 		btnLastFm.setOnAction(_ -> eventManager.post(MODE_LASTFM, PROFILE));
@@ -210,6 +240,7 @@ public class MediaView implements Plugin {
 		HBox.setHgrow(songInfo, Priority.ALWAYS);
 		hbox.getStyleClass().add("ccCard");
 		hbox.getChildren().addAll(songInfo, buttons);
+		hbox.setMaxWidth(Double.MAX_VALUE);
 		hbox.setFillHeight(false);
 		hbox.setMaxHeight(Region.USE_PREF_SIZE);
 		hbox.setAlignment(Pos.CENTER);
@@ -302,41 +333,88 @@ public class MediaView implements Plugin {
 			return;
 		}
 
-		var width = label.getWidth() - label.getInsets().getLeft() - label.getInsets().getRight();
-		if (width <= 0 || text.isEmpty()) {
+		var width = getAvailableWidth(label);
+		usedWidths.put(label, width);
+		scheduleWidthVerification(label);
+
+		if (width <= 0) {
+			// Not laid out yet. Do not let the full text determine the preferred width;
+			// the width listeners and the verification pass retry once a width exists.
+			showText(label, StringUtils.EMPTY, onFinished);
+			return;
+		}
+		if (text.isEmpty()) {
 			showText(label, text, onFinished);
 			return;
 		}
+		showText(label, ellipsize(label, text, width), onFinished);
+	}
 
-		var renderedText = label.getChildrenUnmodifiable().stream().filter(TextFlow.class::isInstance)
-				.map(TextFlow.class::cast).flatMap(flow -> flow.getChildrenUnmodifiable().stream())
-				.filter(Text.class::isInstance).map(Text.class::cast).findFirst().orElse(null);
+	/**
+	 * The width available to the label's text. The songInfo container is the
+	 * source of truth, as the label's own width may be stale or content driven.
+	 */
+	private double getAvailableWidth(AnimatedLabel label) {
+		if (label.getScene() != null) {
+			// make sure insets and fonts reflect the current style classes
+			label.applyCss();
+		}
+		var container = songInfo == null ? label.getWidth()
+				: songInfo.getWidth() - songInfo.getInsets().getLeft() - songInfo.getInsets().getRight();
+		var insets = label.getInsets();
+		return Math.floor(container - insets.getLeft() - insets.getRight()) - WIDTH_TOLERANCE;
+	}
+
+	private static String ellipsize(AnimatedLabel label, String text, double width) {
 		var measure = new Text();
-		measure.setFont(renderedText == null ? Font.getDefault() : renderedText.getFont());
+		measure.setFont(findRenderedFont(label));
+
 		measure.setText(text);
 		if (measure.getLayoutBounds().getWidth() <= width) {
-			showText(label, text, onFinished);
-			return;
+			return text;
+		}
+
+		measure.setText(ELLIPSIS);
+		if (measure.getLayoutBounds().getWidth() > width) {
+			return StringUtils.EMPTY;
 		}
 
 		var codePoints = text.codePoints().toArray();
 		var low = 0;
 		var high = codePoints.length;
-		measure.setText("...");
-		if (measure.getLayoutBounds().getWidth() > width) {
-			showText(label, StringUtils.EMPTY, onFinished);
-			return;
-		}
 		while (low < high) {
 			var middle = (low + high + 1) / 2;
-			measure.setText(new String(codePoints, 0, middle) + "...");
+			measure.setText(new String(codePoints, 0, middle).stripTrailing() + ELLIPSIS);
 			if (measure.getLayoutBounds().getWidth() <= width) {
 				low = middle;
 			} else {
 				high = middle - 1;
 			}
 		}
-		showText(label, new String(codePoints, 0, low) + "...", onFinished);
+		return new String(codePoints, 0, low).stripTrailing() + ELLIPSIS;
+	}
+
+	private static Font findRenderedFont(AnimatedLabel label) {
+		return label.getChildrenUnmodifiable().stream().filter(TextFlow.class::isInstance).map(TextFlow.class::cast)
+				.flatMap(flow -> flow.getChildrenUnmodifiable().stream()).filter(Text.class::isInstance)
+				.map(Text.class::cast).map(Text::getFont).findFirst().orElse(Font.getDefault());
+	}
+
+	/**
+	 * After the next layout pass, recalculates if the available width differs from
+	 * the one used for the current text (e.g. layout or CSS finished late).
+	 */
+	private void scheduleWidthVerification(AnimatedLabel label) {
+		if (!pendingVerification.add(label)) {
+			return;
+		}
+		Platform.runLater(() -> {
+			pendingVerification.remove(label);
+			var used = usedWidths.getOrDefault(label, Double.NaN);
+			if (Math.abs(getAvailableWidth(label) - used) > 0.5) {
+				updateLabelText(label);
+			}
+		});
 	}
 
 	/**
