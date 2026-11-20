@@ -60,6 +60,8 @@ public class MediaView implements Plugin {
 
 	public static final String SETTING_LASTFM_POLLINGINTERVAL = "media.lastfm.pollinginterval";
 
+	public static final String SETTING_MEDIABRIDGE_DEBUG = "media.bridge.debugenabled";
+
 	private static final String PROFILE = "profile";
 
 	public static final String NOT_PLAYING = "Not playing";
@@ -351,8 +353,8 @@ public class MediaView implements Plugin {
 	}
 
 	/**
-	 * The width available to the label's text. The songInfo container is the
-	 * source of truth, as the label's own width may be stale or content driven.
+	 * The width available to the label's text. The songInfo container is the source
+	 * of truth, as the label's own width may be stale or content driven.
 	 */
 	private double getAvailableWidth(AnimatedLabel label) {
 		if (label.getScene() != null) {
@@ -643,6 +645,7 @@ public class MediaView implements Plugin {
 		map.put(SETTING_LASTFM_APIKEY, StringUtils.EMPTY);
 		map.put(SETTING_LASTFM_USERNAME, StringUtils.EMPTY);
 		map.put(SETTING_LASTFM_POLLINGINTERVAL, "10000");
+		map.put(SETTING_MEDIABRIDGE_DEBUG, "false");
 		return map;
 	}
 
