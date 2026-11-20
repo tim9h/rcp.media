@@ -30,9 +30,11 @@ import com.google.inject.Singleton;
 import dev.tim9h.rcp.event.Event;
 import dev.tim9h.rcp.event.EventManager;
 import dev.tim9h.rcp.logging.InjectLogger;
+import dev.tim9h.rcp.media.MediaView;
 import dev.tim9h.rcp.media.service.bean.CurrentTrackProperties;
 import dev.tim9h.rcp.media.service.bean.Track;
 import dev.tim9h.rcp.media.service.lastfm.LastFmWatcher;
+import dev.tim9h.rcp.settings.Settings;
 import javafx.application.Platform;
 
 @Singleton
@@ -82,6 +84,9 @@ public class MediaBridgeClient {
 	@Inject
 	private LastFmWatcher watcher;
 
+	@Inject
+	private Settings settings;
+
 	private final Gson gson = new Gson();
 
 	private final AtomicBoolean running = new AtomicBoolean(false);
@@ -123,7 +128,11 @@ public class MediaBridgeClient {
 			}
 
 			logger.info(() -> "Starting MediaBridge from: " + executable);
-			process = new ProcessBuilder(executable.toString()).start();
+			if (settings.getBoolean(MediaView.SETTING_MEDIABRIDGE_DEBUG)) {
+				process = new ProcessBuilder(executable.toString(), "--debug").start();
+			} else {
+				process = new ProcessBuilder(executable.toString()).start();
+			}
 			reader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
 			writer = new BufferedWriter(new OutputStreamWriter(process.getOutputStream(), StandardCharsets.UTF_8));
 
