@@ -9,7 +9,6 @@ import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -35,6 +34,7 @@ import dev.tim9h.rcp.media.service.bean.CurrentTrackProperties;
 import dev.tim9h.rcp.media.service.bean.Track;
 import dev.tim9h.rcp.media.service.lastfm.LastFmWatcher;
 import dev.tim9h.rcp.settings.Settings;
+import dev.tim9h.rcp.util.RcpDirectories;
 import javafx.application.Platform;
 
 @Singleton
@@ -156,7 +156,7 @@ public class MediaBridgeClient {
 
 	private Path extractMediaBridge() {
 		try {
-			var rcpDirectory = Paths.get(System.getProperty("user.home"), "rcp");
+			var rcpDirectory = RcpDirectories.getPluginDataDirectory(MediaView.PLUGIN_ID);
 			var executable = rcpDirectory.resolve(MEDIA_BRIDGE_EXE);
 
 			Files.createDirectories(rcpDirectory);

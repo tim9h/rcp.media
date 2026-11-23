@@ -54,6 +54,8 @@ import javafx.scene.text.TextFlow;
 
 public class MediaView implements Plugin {
 
+	public static final String PLUGIN_ID = "media";
+
 	public static final String SETTING_LASTFM_APIKEY = "media.lastfm.apikey";
 
 	public static final String SETTING_LASTFM_USERNAME = "media.lastfm.username";
@@ -139,7 +141,7 @@ public class MediaView implements Plugin {
 
 	@Override
 	public String getId() {
-		return "media";
+		return PLUGIN_ID;
 	}
 
 	@Override
