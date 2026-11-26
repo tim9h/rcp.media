@@ -1,4 +1,4 @@
-module rcp.clock {
+module rcp.media {
 	exports dev.tim9h.rcp.media;
 
 	requires transitive rcp.api;
